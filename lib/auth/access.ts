@@ -17,55 +17,65 @@ export interface AccessContext {
 }
 
 export async function getSessionUser(): Promise<User | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
-  if (error) {
+    if (error) {
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    console.error("Unable to read the current session", error);
     return null;
   }
-
-  return user;
 }
 
 async function getActiveMembership(
   userId: string,
 ): Promise<MembershipContext | null> {
-  const supabase = await createSupabaseServerClient();
-  const { data: cohort, error: cohortError } = await supabase
-    .from("cohorts")
-    .select("id")
-    .eq("is_active", true)
-    .maybeSingle();
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: cohort, error: cohortError } = await supabase
+      .from("cohorts")
+      .select("id")
+      .eq("is_active", true)
+      .maybeSingle();
 
-  if (cohortError || !cohort) {
+    if (cohortError || !cohort) {
+      return null;
+    }
+
+    const { data: membership, error } = await supabase
+      .from("memberships")
+      .select("cohort_id, user_id, role, join_local_date")
+      .eq("cohort_id", cohort.id)
+      .eq("user_id", userId)
+      .is("removed_at", null)
+      .maybeSingle();
+
+    if (error || !membership) {
+      return null;
+    }
+
+    if (membership.role !== "member" && membership.role !== "admin") {
+      return null;
+    }
+
+    return {
+      cohortId: membership.cohort_id,
+      userId: membership.user_id,
+      role: membership.role,
+      joinLocalDate: membership.join_local_date,
+    };
+  } catch (error) {
+    console.error("Unable to read the current membership", error);
     return null;
   }
-
-  const { data: membership, error } = await supabase
-    .from("memberships")
-    .select("cohort_id, user_id, role, join_local_date")
-    .eq("cohort_id", cohort.id)
-    .eq("user_id", userId)
-    .is("removed_at", null)
-    .maybeSingle();
-
-  if (error || !membership) {
-    return null;
-  }
-
-  if (membership.role !== "member" && membership.role !== "admin") {
-    return null;
-  }
-
-  return {
-    cohortId: membership.cohort_id,
-    userId: membership.user_id,
-    role: membership.role,
-    joinLocalDate: membership.join_local_date,
-  };
 }
 
 export async function getAccessContext(): Promise<AccessContext | null> {

@@ -10,8 +10,11 @@ const serverEnvSchema = publicEnvSchema.extend({
   INVITE_INTENT_SECRET: z.string().min(32),
 });
 
-function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
-  const result = schema.safeParse(process.env);
+function parseEnv<T extends z.ZodTypeAny>(
+  schema: T,
+  values: Record<string, string | undefined>,
+): z.infer<T> {
+  const result = schema.safeParse(values);
 
   if (!result.success) {
     const fields = result.error.issues.map((issue) => issue.path.join("."));
@@ -22,9 +25,20 @@ function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
 }
 
 export function getPublicEnv() {
-  return parseEnv(publicEnvSchema);
+  // Static `process.env.X` access is required so Next.js inlines NEXT_PUBLIC_*
+  // values. `safeParse(process.env)` is a dynamic lookup and can be empty in
+  // production bundles, which crashes Server Components as React error #441.
+  return parseEnv(publicEnvSchema, {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  });
 }
 
 export function getServerEnv() {
-  return parseEnv(serverEnvSchema);
+  return parseEnv(serverEnvSchema, {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    INVITE_INTENT_SECRET: process.env.INVITE_INTENT_SECRET,
+  });
 }
