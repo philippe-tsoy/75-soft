@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireActiveMember, type AccessContext } from "@/lib/auth/access";
@@ -218,7 +219,7 @@ export async function updateCurrentProfile(
   return toProfileDTO(updated, client, access.membership.role);
 }
 
-export async function getCurrentProfile(): Promise<ProfileDTO> {
+export const getCurrentProfile = cache(async (): Promise<ProfileDTO> => {
   const access: AccessContext = await requireActiveMember();
   const client = await createSupabaseServerClient();
   const profile = await getProfileForUser(
@@ -232,7 +233,7 @@ export async function getCurrentProfile(): Promise<ProfileDTO> {
   }
 
   return profile;
-}
+});
 
 export async function getCurrentProfileWithSettings(): Promise<{
   profile: ProfileDTO;

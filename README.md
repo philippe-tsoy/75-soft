@@ -22,6 +22,11 @@ public URL/key. Set `NEXT_PUBLIC_APP_URL` to
 `https://75-soft-seven.vercel.app` (or your custom production domain) so
 copied invite links do not point to localhost.
 
+`vercel.json` pins functions to `pdx1` because the Supabase project is in
+`us-west-2`. Server rendering makes several dependent database round trips per
+page, so colocating the functions with the database matters far more than
+their distance to the browser. Change the region if the database moves.
+
 The service-role key is server-only. It must never be imported by a client
 component or exposed as a `NEXT_PUBLIC_` variable.
 

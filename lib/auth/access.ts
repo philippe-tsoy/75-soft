@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 
 import { HttpError } from "@/lib/http";
@@ -16,7 +17,10 @@ export interface AccessContext {
   membership: MembershipContext;
 }
 
-export async function getSessionUser(): Promise<User | null> {
+// A layout, its page, and any nested server components each resolve access
+// independently, so these are memoized per request to collapse what would
+// otherwise be a dozen sequential round trips into one of each.
+export const getSessionUser = cache(async (): Promise<User | null> => {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -33,64 +37,56 @@ export async function getSessionUser(): Promise<User | null> {
     console.error("Unable to read the current session", error);
     return null;
   }
-}
+});
 
-async function getActiveMembership(
-  userId: string,
-): Promise<MembershipContext | null> {
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { data: cohort, error: cohortError } = await supabase
-      .from("cohorts")
-      .select("id")
-      .eq("is_active", true)
-      .maybeSingle();
+const getActiveMembership = cache(
+  async (userId: string): Promise<MembershipContext | null> => {
+    try {
+      const supabase = await createSupabaseServerClient();
+      const { data: membership, error } = await supabase
+        .from("memberships")
+        .select("cohort_id, user_id, role, join_local_date, cohorts!inner(id)")
+        .eq("user_id", userId)
+        .is("removed_at", null)
+        .eq("cohorts.is_active", true)
+        .maybeSingle();
 
-    if (cohortError || !cohort) {
+      if (error || !membership) {
+        return null;
+      }
+
+      if (membership.role !== "member" && membership.role !== "admin") {
+        return null;
+      }
+
+      return {
+        cohortId: membership.cohort_id,
+        userId: membership.user_id,
+        role: membership.role,
+        joinLocalDate: membership.join_local_date,
+      };
+    } catch (error) {
+      console.error("Unable to read the current membership", error);
+      return null;
+    }
+  },
+);
+
+export const getAccessContext = cache(
+  async (): Promise<AccessContext | null> => {
+    const user = await getSessionUser();
+    if (!user) {
       return null;
     }
 
-    const { data: membership, error } = await supabase
-      .from("memberships")
-      .select("cohort_id, user_id, role, join_local_date")
-      .eq("cohort_id", cohort.id)
-      .eq("user_id", userId)
-      .is("removed_at", null)
-      .maybeSingle();
-
-    if (error || !membership) {
+    const membership = await getActiveMembership(user.id);
+    if (!membership) {
       return null;
     }
 
-    if (membership.role !== "member" && membership.role !== "admin") {
-      return null;
-    }
-
-    return {
-      cohortId: membership.cohort_id,
-      userId: membership.user_id,
-      role: membership.role,
-      joinLocalDate: membership.join_local_date,
-    };
-  } catch (error) {
-    console.error("Unable to read the current membership", error);
-    return null;
-  }
-}
-
-export async function getAccessContext(): Promise<AccessContext | null> {
-  const user = await getSessionUser();
-  if (!user) {
-    return null;
-  }
-
-  const membership = await getActiveMembership(user.id);
-  if (!membership) {
-    return null;
-  }
-
-  return { user, membership };
-}
+    return { user, membership };
+  },
+);
 
 export async function requireSession(): Promise<User> {
   const user = await getSessionUser();
