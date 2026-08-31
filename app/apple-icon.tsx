@@ -1,26 +1,24 @@
 import { ImageResponse } from "next/og";
 
+import { ChallengeMark } from "@/components/brand/challenge-mark";
+
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
 export default function AppleIcon() {
   return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#2f6b4f",
-          color: "#ffffff",
-          fontSize: 80,
-        }}
-      >
-        75
-      </div>
-    ),
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#2f6b4f",
+      }}
+    >
+      <ChallengeMark size={122} />
+    </div>,
     size,
   );
 }
