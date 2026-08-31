@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PostCard } from "@/components/feed/post-card";
 import { PostComposer } from "@/components/feed/post-composer";
@@ -33,6 +39,67 @@ const post: PostDTO = {
 describe("W3 feed components", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("prefills required post amounts with challenge targets", () => {
+    render(
+      <PostComposer
+        onClose={vi.fn()}
+        onPosted={vi.fn()}
+        open
+        optionalGoals={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /workout/i }));
+    fireEvent.click(screen.getByRole("button", { name: /water/i }));
+    fireEvent.click(screen.getByRole("button", { name: /reading/i }));
+
+    expect(screen.getByLabelText(/workout amount/i)).toHaveValue(45);
+    expect(screen.getByLabelText(/water amount/i)).toHaveValue(2);
+    expect(screen.getByLabelText("Water unit")).toHaveValue("l");
+    expect(screen.getByLabelText(/reading amount/i)).toHaveValue(10);
+  });
+
+  it("accepts water amounts expressed as fractional liters", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: {} }), { status: 201 }),
+      );
+    const { container } = render(
+      <PostComposer
+        onClose={vi.fn()}
+        onPosted={vi.fn()}
+        open
+        optionalGoals={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /water/i }));
+    fireEvent.change(screen.getByLabelText(/water amount/i), {
+      target: { value: "0.5" },
+    });
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [, init] = fetchMock.mock.calls[0];
+    const goals = JSON.parse(
+      String((init?.body as FormData).get("goals")),
+    ) as Array<{
+      kind: string;
+      key: string;
+      amount: number;
+      unit: string;
+    }>;
+
+    expect(goals).toEqual([
+      { kind: "required", key: "water", amount: 0.5, unit: "l" },
+    ]);
   });
 
   it("submits a required-goal post with a retry-stable operation id", async () => {

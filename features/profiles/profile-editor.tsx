@@ -124,7 +124,7 @@ export function ProfileEditor({
               ? "bg-surface-accent rounded-xl px-3 py-2 text-sm"
               : "rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800"
           }
-          role="status"
+          role={success ? "status" : "alert"}
         >
           {message}
         </p>
@@ -134,6 +134,7 @@ export function ProfileEditor({
         <Input
           disabled={busy}
           id="profile-display-name"
+          maxLength={80}
           onChange={(event) => setDisplayName(event.target.value)}
           required
           value={displayName}
@@ -154,6 +155,7 @@ export function ProfileEditor({
         <Label htmlFor="profile-avatar">Profile photo (optional)</Label>
         <Input
           accept="image/jpeg,image/png,image/webp"
+          capture="user"
           disabled={busy}
           id="profile-avatar"
           onChange={(event) => setAvatar(event.target.files?.[0] ?? null)}

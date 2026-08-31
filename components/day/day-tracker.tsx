@@ -1,8 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { AchievementToast } from "@/components/achievements";
+import { Sheet } from "@/components/sheets/sheet";
 import { Button, Card, Input, Label } from "@/components/ui";
 import {
   DayApiError,
@@ -19,6 +23,7 @@ import type {
   DayRollupDTO,
   GoalProgressDTO,
 } from "@/lib/types";
+import { queryKeys } from "@/lib/query-keys";
 
 import { ContainerManager } from "./container-manager";
 import { GoalControl } from "./goal-control";
@@ -37,11 +42,42 @@ interface DayMutationResponse {
   newAchievements?: AchievementDTO[];
 }
 
+type AmountUnit = "minutes" | "ml" | "l" | "pages";
+
+type RetryAction =
+  | {
+      kind: "amount";
+      goal: AmountGoal;
+      amount: number;
+      unit: AmountUnit;
+      operationId: string;
+    }
+  | {
+      kind: "container";
+      container: ContainerDTO;
+      operationId: string;
+    }
+  | {
+      kind: "diet";
+      operationId: string;
+    };
+
 function formatStatus(status: DayRollupDTO["status"]): string {
   return status.replace("_", " ");
 }
 
+function formatWaterVolume(volumeMl: number): string {
+  const liters = volumeMl / 1_000;
+  return Number.isInteger(liters)
+    ? `${liters} L`
+    : `${volumeMl.toLocaleString()} ml`;
+}
+
 function apiErrorMessage(error: unknown): string {
+  if (error instanceof DayApiError && error.status === 401) {
+    return "Your session expired. Sign in again to save changes.";
+  }
+
   return error instanceof DayApiError
     ? error.message
     : "Your change could not be saved. Try again.";
@@ -61,14 +97,17 @@ function CustomAmountForm({
   inputPlaceholder: string;
 }) {
   const [customAmount, setCustomAmount] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   function submitCustomAmount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amount = Number(customAmount);
     if (!Number.isInteger(amount) || amount <= 0) {
+      setValidationError("Enter a positive whole number.");
       return;
     }
 
+    setValidationError(null);
     onAdd(amount);
     setCustomAmount("");
   }
@@ -87,7 +126,10 @@ function CustomAmountForm({
         id={id}
         inputMode="numeric"
         min={1}
-        onChange={(event) => setCustomAmount(event.target.value)}
+        onChange={(event) => {
+          setCustomAmount(event.target.value);
+          setValidationError(null);
+        }}
         placeholder={inputPlaceholder}
         type="number"
         value={customAmount}
@@ -95,6 +137,95 @@ function CustomAmountForm({
       <Button disabled={pending} type="submit">
         Add
       </Button>
+      {validationError ? (
+        <p className="basis-full text-sm text-red-700" role="alert">
+          {validationError}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function CustomWaterAmountForm({
+  id,
+  pending,
+  onAdd,
+}: {
+  id: string;
+  pending: boolean;
+  onAdd: (amount: number, unit: "ml" | "l") => void;
+}) {
+  const [customAmount, setCustomAmount] = useState("");
+  const [unit, setUnit] = useState<"ml" | "l">("ml");
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  function submitCustomAmount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const amount = Number(customAmount);
+    const normalized = unit === "l" ? amount * 1_000 : amount;
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !Number.isSafeInteger(normalized)
+    ) {
+      setValidationError(
+        unit === "l"
+          ? "Use a positive amount that converts to whole milliliters."
+          : "Enter a positive whole number.",
+      );
+      return;
+    }
+
+    setValidationError(null);
+    onAdd(amount, unit);
+    setCustomAmount("");
+  }
+
+  return (
+    <form
+      className="flex min-w-[14rem] flex-1 flex-wrap gap-2"
+      onSubmit={submitCustomAmount}
+    >
+      <Label className="sr-only" htmlFor={id}>
+        Custom water amount
+      </Label>
+      <Input
+        aria-invalid={validationError ? true : undefined}
+        aria-label="Custom water amount"
+        disabled={pending}
+        id={id}
+        inputMode={unit === "l" ? "decimal" : "numeric"}
+        min={unit === "l" ? "0.01" : "1"}
+        onChange={(event) => {
+          setCustomAmount(event.target.value);
+          setValidationError(null);
+        }}
+        placeholder={unit === "l" ? "Liters" : "Milliliters"}
+        step={unit === "l" ? "any" : "1"}
+        type="number"
+        value={customAmount}
+      />
+      <select
+        aria-label="Custom water unit"
+        className="border-border bg-card text-foreground focus-visible:ring-primary min-h-11 rounded-xl border px-3 text-sm outline-none focus-visible:ring-2"
+        disabled={pending}
+        onChange={(event) => {
+          setUnit(event.target.value as "ml" | "l");
+          setValidationError(null);
+        }}
+        value={unit}
+      >
+        <option value="ml">ml</option>
+        <option value="l">L</option>
+      </select>
+      <Button disabled={pending} type="submit">
+        Add
+      </Button>
+      {validationError ? (
+        <p className="basis-full text-sm text-red-700" role="alert">
+          {validationError}
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -145,13 +276,31 @@ export function DayTracker({
   userId,
   today,
 }: DayTrackerProps) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [day, setDay] = useState(initialDay);
   const [containers, setContainers] = useState(initialContainers);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [retryAction, setRetryAction] = useState<RetryAction | null>(null);
+  const [containersOpen, setContainersOpen] = useState(false);
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
   const dayMutationPending = Object.values(pending).some(Boolean);
+
+  function refreshRelatedData() {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.day(userId, day.localDate),
+    });
+    void queryClient.invalidateQueries({ queryKey: ["group-strip"] });
+    void queryClient.invalidateQueries({ queryKey: ["board"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.person(userId) });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.achievements(userId),
+    });
+    router.refresh();
+  }
 
   function setGoalPending(goal: string, value: boolean) {
     setPending((current) => ({ ...current, [goal]: value }));
@@ -160,7 +309,8 @@ export function DayTracker({
   async function addAmount(
     goal: AmountGoal,
     amount: number,
-    unit: "minutes" | "ml" | "pages",
+    unit: AmountUnit,
+    retryOperationId?: string,
   ) {
     if (dayMutationPending) {
       return;
@@ -171,10 +321,19 @@ export function DayTracker({
     }
 
     const previous = day;
-    const operation = withOperationId();
+    const operation = withOperationId(retryOperationId);
+    const action: RetryAction = {
+      amount,
+      goal,
+      kind: "amount",
+      operationId: operation.operationId,
+      unit,
+    };
     setDay(applyOptimisticAmount(day, goal, amount, today));
     setGoalPending(goal, true);
     setError(null);
+    setSessionExpired(false);
+    setRetryAction(null);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -192,15 +351,23 @@ export function DayTracker({
       );
       setDay(result.day);
       setAchievementToast(result.newAchievements?.[0] ?? null);
+      refreshRelatedData();
     } catch (requestError) {
       setDay(previous);
       setError(apiErrorMessage(requestError));
+      setSessionExpired(
+        requestError instanceof DayApiError && requestError.status === 401,
+      );
+      setRetryAction(action);
     } finally {
       setGoalPending(goal, false);
     }
   }
 
-  async function addContainer(container: ContainerDTO) {
+  async function addContainer(
+    container: ContainerDTO,
+    retryOperationId?: string,
+  ) {
     if (dayMutationPending) {
       return;
     }
@@ -210,10 +377,17 @@ export function DayTracker({
     }
 
     const previous = day;
-    const operation = withOperationId();
+    const operation = withOperationId(retryOperationId);
+    const action: RetryAction = {
+      container,
+      kind: "container",
+      operationId: operation.operationId,
+    };
     setDay(applyOptimisticAmount(day, "water", container.volumeMl, today));
     setGoalPending("water", true);
     setError(null);
+    setSessionExpired(false);
+    setRetryAction(null);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -230,15 +404,20 @@ export function DayTracker({
       );
       setDay(result.day);
       setAchievementToast(result.newAchievements?.[0] ?? null);
+      refreshRelatedData();
     } catch (requestError) {
       setDay(previous);
       setError(apiErrorMessage(requestError));
+      setSessionExpired(
+        requestError instanceof DayApiError && requestError.status === 401,
+      );
+      setRetryAction(action);
     } finally {
       setGoalPending("water", false);
     }
   }
 
-  async function toggleDiet() {
+  async function toggleDiet(retryOperationId?: string) {
     if (dayMutationPending) {
       return;
     }
@@ -248,10 +427,16 @@ export function DayTracker({
     }
 
     const previous = day;
-    const operation = withOperationId();
+    const operation = withOperationId(retryOperationId);
+    const action: RetryAction = {
+      kind: "diet",
+      operationId: operation.operationId,
+    };
     setDay(applyOptimisticDiet(day, today));
     setGoalPending("diet", true);
     setError(null);
+    setSessionExpired(false);
+    setRetryAction(null);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -266,12 +451,40 @@ export function DayTracker({
       );
       setDay(result.day);
       setAchievementToast(result.newAchievements?.[0] ?? null);
+      refreshRelatedData();
     } catch (requestError) {
       setDay(previous);
       setError(apiErrorMessage(requestError));
+      setSessionExpired(
+        requestError instanceof DayApiError && requestError.status === 401,
+      );
+      setRetryAction(action);
     } finally {
       setGoalPending("diet", false);
     }
+  }
+
+  function retryFailedAction() {
+    if (!retryAction) {
+      return;
+    }
+
+    if (retryAction.kind === "amount") {
+      void addAmount(
+        retryAction.goal,
+        retryAction.amount,
+        retryAction.unit,
+        retryAction.operationId,
+      );
+      return;
+    }
+
+    if (retryAction.kind === "container") {
+      void addContainer(retryAction.container, retryAction.operationId);
+      return;
+    }
+
+    void toggleDiet(retryAction.operationId);
   }
 
   return (
@@ -309,13 +522,30 @@ export function DayTracker({
           </p>
         ) : null}
         {error ? (
-          <p
+          <div
             aria-live="assertive"
-            className="mt-4 text-sm text-red-700"
+            className="mt-4 flex flex-wrap items-center gap-3 text-sm text-red-700"
             role="alert"
           >
-            {error}
-          </p>
+            <p>{error}</p>
+            {retryAction ? (
+              <Button
+                disabled={dayMutationPending}
+                onClick={retryFailedAction}
+                variant="secondary"
+              >
+                Retry
+              </Button>
+            ) : null}
+            {sessionExpired ? (
+              <Link
+                className="font-semibold underline underline-offset-2"
+                href="/login"
+              >
+                Sign in again
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </Card>
 
@@ -325,7 +555,7 @@ export function DayTracker({
         onAdd={(amount) => void addAmount("workout", amount, "minutes")}
         pending={dayMutationPending || !day.editable}
         progress={day.goals.workout}
-        quickAmounts={[15, 30]}
+        quickAmounts={[15, 30, 45]}
         title="Workout"
       />
 
@@ -334,20 +564,13 @@ export function DayTracker({
         progress={day.goals.water}
         title="Water"
       >
-        {containers.map((container) => (
-          <Button
-            disabled={
-              dayMutationPending ||
-              !day.editable ||
-              container.id.startsWith("pending-")
-            }
-            key={container.id}
-            onClick={() => void addContainer(container)}
-            variant="secondary"
-          >
-            +{container.volumeMl} ml {container.label}
-          </Button>
-        ))}
+        <Button
+          disabled={dayMutationPending}
+          onClick={() => setContainersOpen(true)}
+          variant="secondary"
+        >
+          Add water container
+        </Button>
         <Button
           disabled={dayMutationPending || !day.editable}
           onClick={() => void addAmount("water", 250, "ml")}
@@ -355,11 +578,9 @@ export function DayTracker({
         >
           +250 ml
         </Button>
-        <CustomAmountForm
+        <CustomWaterAmountForm
           id="water-custom-amount"
-          inputLabel="Water milliliters to add"
-          inputPlaceholder="Milliliters"
-          onAdd={(amount) => void addAmount("water", amount, "ml")}
+          onAdd={(amount, unit) => void addAmount("water", amount, unit)}
           pending={dayMutationPending || !day.editable}
         />
       </GoalControl>
@@ -388,11 +609,52 @@ export function DayTracker({
         </Button>
       </GoalControl>
 
-      <ContainerManager
-        containers={containers}
-        onContainersChange={setContainers}
-        onError={setError}
-      />
+      <Sheet
+        onClose={() => setContainersOpen(false)}
+        open={containersOpen}
+        title="Water containers"
+      >
+        <div className="space-y-4">
+          <section aria-labelledby="water-container-picker-title">
+            <h3
+              className="text-foreground mb-2 text-sm font-semibold"
+              id="water-container-picker-title"
+            >
+              Add a container
+            </h3>
+            {containers.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {containers.map((container) => (
+                  <Button
+                    disabled={
+                      dayMutationPending ||
+                      !day.editable ||
+                      container.id.startsWith("pending-")
+                    }
+                    key={container.id}
+                    onClick={() => {
+                      setContainersOpen(false);
+                      void addContainer(container);
+                    }}
+                    variant="secondary"
+                  >
+                    +{formatWaterVolume(container.volumeMl)} {container.label}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted rounded-xl border border-dashed p-3 text-sm">
+                No saved containers yet. Add one below.
+              </p>
+            )}
+          </section>
+          <ContainerManager
+            containers={containers}
+            onContainersChange={setContainers}
+            onError={setError}
+          />
+        </div>
+      </Sheet>
 
       <p className="text-muted px-1 text-xs">
         Workout, water, and reading add to the day. Diet uses the latest toggle

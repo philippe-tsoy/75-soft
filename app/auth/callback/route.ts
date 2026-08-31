@@ -4,8 +4,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   clearInviteIntentCookie,
   INVITE_INTENT_COOKIE,
-  verifyInviteIntent,
-  verifyOAuthState,
 } from "@/features/auth/invite-intent";
 import {
   bindInviteIntentToUser,
@@ -19,7 +17,7 @@ import {
   hasConflictingProfileEmail,
 } from "@/features/auth/registration";
 import { safeInternalRedirect } from "@/features/auth/redirects";
-import { getPublicEnv, getServerEnv } from "@/lib/config/env";
+import { getPublicEnv } from "@/lib/config/env";
 import { handleRouteError } from "@/lib/http";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -106,73 +104,10 @@ export async function GET(request: NextRequest) {
     }
 
     const membershipState = await getMembershipState(data.user.id, admin);
-    const stateToken = request.nextUrl.searchParams.get("state");
-    const { INVITE_INTENT_SECRET } = getServerEnv();
-
-    if (type !== "signup" && !stateToken) {
-      await supabase.auth.signOut();
-      setRedirect(response, request, "/login?error=invalid_auth_state");
-      return response;
-    }
-
     if (type !== "signup") {
-      const state = stateToken
-        ? verifyOAuthState(stateToken, INVITE_INTENT_SECRET)
-        : null;
-      if (!state) {
-        await supabase.auth.signOut();
-        setRedirect(response, request, "/login?error=invalid_auth_state");
-        return response;
-      }
-
-      if (state.inviteIntentId) {
-        const token = request.cookies.get(INVITE_INTENT_COOKIE)?.value;
-        const invitePayload = token
-          ? verifyInviteIntent(token, INVITE_INTENT_SECRET)
-          : null;
-        const intent = await findValidInviteIntent(
-          token,
-          admin,
-          Date.now(),
-          data.user.id,
-        );
-
-        if (
-          !invitePayload ||
-          !intent ||
-          invitePayload.intentId !== state.inviteIntentId ||
-          invitePayload.nonce !== state.nonce ||
-          invitePayload.inviteCodeHash !== state.inviteCodeHash ||
-          intent.id !== state.inviteIntentId
-        ) {
-          await supabase.auth.signOut();
-          setRedirect(response, request, "/invite?error=invite_required");
-          clearInviteIntentCookie(response);
-          return response;
-        }
-
-        if (membershipState === "removed") {
-          await supabase.auth.signOut();
-          setRedirect(response, request, "/login?error=removed");
-          clearInviteIntentCookie(response);
-          return response;
-        }
-
-        if (membershipState === "active") {
-          setRedirect(response, request, nextPath);
-          clearInviteIntentCookie(response);
-          return response;
-        }
-
-        await bindInviteIntentToUser(
-          intent.id,
-          data.user.id,
-          data.user.email ?? null,
-          admin,
-        );
-        setRedirect(response, request, "/complete-profile");
-        return response;
-      }
+      await supabase.auth.signOut();
+      setRedirect(response, request, "/login?error=auth_callback_failed");
+      return response;
     }
 
     if (membershipState === "active") {

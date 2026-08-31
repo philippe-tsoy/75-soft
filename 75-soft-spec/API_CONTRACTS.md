@@ -125,8 +125,6 @@ Clears the application session. **Response:** `204`.
 **Body:** `{ "email": "user@example.com" }`  
 **Response:** `202` with a generic message regardless of account existence.
 
-OAuth start/callback routes use Supabase's supported Google flow and the invite intent described in [AUTH_AND_ACCESS.md](./AUTH_AND_ACCESS.md). They are browser routes rather than JSON APIs.
-
 ## 3. Profile and member reads
 
 ### `GET /api/profile`

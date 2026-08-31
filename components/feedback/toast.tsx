@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -17,10 +17,16 @@ export function Toast({
   tone = "default",
   durationMs = 5_000,
 }: ToastProps) {
+  const onDismissRef = useRef(onDismiss);
+
   useEffect(() => {
-    const timeout = window.setTimeout(onDismiss, durationMs);
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => onDismissRef.current(), durationMs);
     return () => window.clearTimeout(timeout);
-  }, [durationMs, onDismiss]);
+  }, [durationMs]);
 
   return (
     <div
@@ -38,7 +44,7 @@ export function Toast({
       <p>{message}</p>
       <button
         aria-label="Dismiss notification"
-        className="focus-visible:ring-primary min-h-9 min-w-9 rounded-lg text-lg leading-none hover:bg-black/5 focus-visible:ring-2"
+        className="focus-visible:ring-primary min-h-11 min-w-11 rounded-lg text-lg leading-none hover:bg-black/5 focus-visible:ring-2"
         onClick={onDismiss}
         type="button"
       >

@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- signed private URLs are runtime data. */
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Lightbox } from "@/components/lightbox/lightbox";
 import { Button, Card, Input } from "@/components/ui";
@@ -81,6 +81,76 @@ export function PostCard({
   );
   const [actionError, setActionError] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const reactionTriggerRef = useRef<HTMLButtonElement>(null);
+  const reactionMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!reactionOpen) {
+      return;
+    }
+
+    const firstItem =
+      reactionMenuRef.current?.querySelector<HTMLButtonElement>(
+        '[role="menuitem"]',
+      );
+    firstItem?.focus();
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !reactionMenuRef.current?.contains(target) &&
+        !reactionTriggerRef.current?.contains(target)
+      ) {
+        setReactionOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setReactionOpen(false);
+        reactionTriggerRef.current?.focus();
+        return;
+      }
+
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        return;
+      }
+
+      const items = Array.from(
+        reactionMenuRef.current?.querySelectorAll<HTMLButtonElement>(
+          '[role="menuitem"]',
+        ) ?? [],
+      );
+      const currentIndex = items.indexOf(
+        document.activeElement as HTMLButtonElement,
+      );
+      if (items.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      const nextIndex =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? items.length - 1
+            : (currentIndex +
+                (event.key === "ArrowDown" ? 1 : -1) +
+                items.length) %
+              items.length;
+      items[nextIndex]?.focus();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [reactionOpen]);
 
   const updateReaction = async (emoji: string | null) => {
     setReactionBusy(true);
@@ -220,7 +290,8 @@ export function PostCard({
                 <time dateTime={post.createdAt}>
                   {displayTimestamp(post.createdAt)}
                 </time>{" "}
-                · Day {dayNumber}
+                · <time dateTime={post.localDate}>{post.localDate}</time> · Day{" "}
+                {dayNumber}
               </p>
             </div>
           </div>
@@ -254,7 +325,9 @@ export function PostCard({
         ) : null}
 
         {post.note ? (
-          <p className="text-foreground text-sm leading-6">{post.note}</p>
+          <p className="text-foreground text-sm leading-6 break-words whitespace-pre-wrap">
+            {post.note}
+          </p>
         ) : null}
 
         {post.photoUrl ? (
@@ -280,6 +353,7 @@ export function PostCard({
               aria-haspopup="menu"
               disabled={reactionBusy}
               onClick={() => setReactionOpen((open) => !open)}
+              ref={reactionTriggerRef}
               variant={reactedEmoji ? "secondary" : "ghost"}
             >
               {reactedEmoji ? `${reactedEmoji} Reacted` : "React"}
@@ -289,6 +363,7 @@ export function PostCard({
                 aria-label="Reaction palette"
                 className="border-border bg-card absolute bottom-full left-0 z-10 mb-2 flex max-w-[calc(100vw-2rem)] flex-wrap gap-1 rounded-2xl border p-2 shadow-lg"
                 role="menu"
+                ref={reactionMenuRef}
               >
                 {reactionPalette.map((emoji) => (
                   <button
@@ -348,7 +423,7 @@ export function PostCard({
                   </p>
                   {comment.canDelete ? (
                     <button
-                      className="text-muted hover:bg-surface-accent min-h-9 shrink-0 rounded-lg px-2 text-xs"
+                      className="text-muted hover:bg-surface-accent min-h-11 shrink-0 rounded-lg px-2 text-xs"
                       onClick={() => removeComment(comment.id)}
                       type="button"
                     >
@@ -361,11 +436,16 @@ export function PostCard({
           ) : (
             <p className="text-muted text-sm">No comments yet.</p>
           )}
+          <p className="text-muted text-xs">
+            {post.comments.length}{" "}
+            {post.comments.length === 1 ? "comment" : "comments"}
+          </p>
           <form className="flex items-start gap-2" onSubmit={submitComment}>
             <label className="sr-only" htmlFor={`comment-${post.id}`}>
               Add a comment
             </label>
             <Input
+              aria-describedby={`comment-count-${post.id}`}
               id={`comment-${post.id}`}
               maxLength={256}
               onChange={(event) => setCommentBody(event.target.value)}
@@ -376,7 +456,7 @@ export function PostCard({
               {commentBusy ? "…" : "Send"}
             </Button>
           </form>
-          <p className="text-muted text-xs">
+          <p className="text-muted text-xs" id={`comment-count-${post.id}`}>
             {graphemeLength(commentBody)}/256 characters
           </p>
           {commentError ? (

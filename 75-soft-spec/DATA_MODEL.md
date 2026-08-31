@@ -113,11 +113,11 @@ Never write the clear code to logs, analytics, audit payloads, or client error r
 
 ### 3.5 `signup_intents`
 
-Short-lived server state used when email confirmation or OAuth signup separates identity creation from membership completion.
+Short-lived server state used when email confirmation separates identity creation from membership completion.
 
 | Column | Type | Rules |
 |--------|------|-------|
-| `id` | uuid PK | Bound to OAuth state or confirmation flow |
+| `id` | uuid PK | Bound to the email confirmation flow |
 | `invite_digest` | text | Does not retain the clear invite |
 | `auth_user_id` | uuid nullable | Set after Auth identity exists |
 | `email_digest` | text nullable | For matching confirmation |
@@ -141,7 +141,7 @@ Expired intents are inaccessible to clients and cleaned up periodically.
 | `updated_at` | timestamptz | |
 | `deleted_at` | timestamptz nullable | Soft delete protects old display/audit references |
 
-New members receive `Glass` (250 ml) and `Bottle` (500 ml) once. A container tap records the volume at tap time; changing a container later does not rewrite old deltas.
+Members create their own containers. A container tap records the volume at tap time; changing a container later does not rewrite old deltas.
 
 ### 3.7 `optional_goals`
 
@@ -375,7 +375,7 @@ Initial migration/seed must create:
 - one active `75 Soft` cohort with start date `2026-09-01`;
 - the four required goal definitions/config constants;
 - the default reaction palette;
-- `Glass` 250 ml and `Bottle` 500 ml for each newly completed member;
+- no water containers; members create their own;
 - fixed and hidden achievement catalog rows;
 - the operator's admin membership through a documented manual step;
 - one active invite through a secure manual/admin step, not a committed code.

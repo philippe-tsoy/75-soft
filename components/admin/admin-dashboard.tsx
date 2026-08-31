@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 
+import { MemberAvatar } from "@/components/board/member-avatar";
 import { Sheet } from "@/components/sheets/sheet";
 import {
   Button,
@@ -18,6 +19,7 @@ import type {
   AdminInviteDTO,
   AdminMemberDTO,
 } from "@/features/admin/types";
+import { getMemberLocalDate } from "@/lib/dates";
 
 type Feedback = {
   tone: "success" | "error";
@@ -33,9 +35,7 @@ type Confirmation =
       localDate: string;
       reason: string;
     }
-  | { kind: "remove"; userId: string; displayName: string }
-  | { kind: "post"; postId: string }
-  | { kind: "comment"; commentId: string };
+  | { kind: "remove"; userId: string; displayName: string };
 
 interface AdminDashboardProps {
   initialData: AdminDashboardDTO;
@@ -70,15 +70,6 @@ async function requestAdminData<T>(
   }
 
   return (body as { data: T }).data;
-}
-
-function getInitials(displayName: string): string {
-  return displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function formatAuditInstant(value: string): string {
@@ -144,12 +135,13 @@ function MemberRow({
         onClick={onSelect}
         type="button"
       >
-        <span
-          aria-hidden="true"
-          className="bg-surface-accent text-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
-        >
-          {getInitials(member.displayName)}
-        </span>
+        <MemberAvatar
+          className="h-10 w-10"
+          profile={{
+            avatarUrl: member.avatarUrl,
+            displayName: member.displayName,
+          }}
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">
             {member.displayName}
@@ -188,12 +180,6 @@ function ConfirmationContent({
   } else if (confirmation.kind === "remove") {
     message = `Remove ${confirmation.displayName} from the active group? Their future access will be blocked and historical posts will not be deleted automatically.`;
     confirmLabel = "Remove member";
-  } else if (confirmation.kind === "post") {
-    message = `Delete post ${confirmation.postId}? Its selected amounts will no longer contribute to scoring and the moderation action will be audited.`;
-    confirmLabel = "Delete post";
-  } else {
-    message = `Delete comment ${confirmation.commentId}? The moderation action will be audited.`;
-    confirmLabel = "Delete comment";
   }
 
   return (
@@ -220,12 +206,14 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(
     initialData.members[0]?.id ?? null,
   );
-  const [localDate, setLocalDate] = useState(
-    new Date().toISOString().slice(0, 10),
+  const [localDate, setLocalDate] = useState(() =>
+    getMemberLocalDate(
+      new Date(),
+      initialData.members[0]?.timezone ??
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ),
   );
   const [reason, setReason] = useState("");
-  const [postId, setPostId] = useState("");
-  const [commentId, setCommentId] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [pendingAction, setPendingAction] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -247,12 +235,16 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
       setInvite(nextInvite);
       setMembers(nextMembers);
       setAudit(nextAudit);
-      setSelectedMemberId((current) => {
-        if (current && nextMembers.some((member) => member.id === current)) {
-          return current;
-        }
-        return nextMembers[0]?.id ?? null;
-      });
+      const nextSelectedMember =
+        nextMembers.find((member) => member.id === selectedMemberId) ??
+        nextMembers[0] ??
+        null;
+      setSelectedMemberId(nextSelectedMember?.id ?? null);
+      if (nextSelectedMember) {
+        setLocalDate(
+          getMemberLocalDate(new Date(), nextSelectedMember.timezone),
+        );
+      }
     } catch (error) {
       setFeedback({
         tone: "error",
@@ -264,7 +256,7 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedMemberId]);
 
   const performConfirmation = useCallback(async () => {
     if (!confirmation) {
@@ -310,27 +302,6 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
           tone: "success",
           message: `${confirmation.displayName} was removed from the active group.`,
         });
-      } else if (confirmation.kind === "post") {
-        await requestAdminData("/api/admin/posts/" + confirmation.postId, {
-          method: "DELETE",
-        });
-        setFeedback({
-          tone: "success",
-          message: "Post deleted and the moderation action was audited.",
-        });
-        setPostId("");
-      } else {
-        await requestAdminData(
-          "/api/admin/comments/" + confirmation.commentId,
-          {
-            method: "DELETE",
-          },
-        );
-        setFeedback({
-          tone: "success",
-          message: "Comment deleted and the moderation action was audited.",
-        });
-        setCommentId("");
       }
 
       setConfirmation(null);
@@ -488,7 +459,12 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
                   <MemberRow
                     key={member.id}
                     member={member}
-                    onSelect={() => setSelectedMemberId(member.id)}
+                    onSelect={() => {
+                      setSelectedMemberId(member.id);
+                      setLocalDate(
+                        getMemberLocalDate(new Date(), member.timezone),
+                      );
+                    }}
                     selected={member.id === selectedMemberId}
                   />
                 ))}
@@ -569,58 +545,18 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
           <CardHeader>
             <CardTitle>Moderation</CardTitle>
             <p className="text-muted text-sm">
-              Deleting a post removes its logged amounts from scoring while
-              keeping the moderation action audited. Enter an ID from the feed;
-              deletion is soft and can be reconciled by the feed owner.
+              Open the Feed to review posts and use the delete controls directly
+              on the post or comment. Deleting a post removes its logged amounts
+              from scoring while keeping the moderation action audited.
             </p>
           </CardHeader>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="moderation-post-id">Post ID</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="moderation-post-id"
-                  onChange={(event) => setPostId(event.target.value)}
-                  placeholder="Post UUID"
-                  value={postId}
-                />
-                <Button
-                  disabled={pendingAction || postId.trim().length === 0}
-                  onClick={() =>
-                    setConfirmation({
-                      kind: "post",
-                      postId: postId.trim(),
-                    })
-                  }
-                  variant="danger"
-                >
-                  Delete post
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="moderation-comment-id">Comment ID</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="moderation-comment-id"
-                  onChange={(event) => setCommentId(event.target.value)}
-                  placeholder="Comment UUID"
-                  value={commentId}
-                />
-                <Button
-                  disabled={pendingAction || commentId.trim().length === 0}
-                  onClick={() =>
-                    setConfirmation({
-                      kind: "comment",
-                      commentId: commentId.trim(),
-                    })
-                  }
-                  variant="danger"
-                >
-                  Delete comment
-                </Button>
-              </div>
-            </div>
+          <div>
+            <Link
+              className="border-border bg-card text-foreground hover:bg-surface-accent focus-visible:ring-primary inline-flex min-h-11 items-center rounded-xl border px-4 py-2 text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none"
+              href="/feed"
+            >
+              Open Feed moderation
+            </Link>
           </div>
         </Card>
 

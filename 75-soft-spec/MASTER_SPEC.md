@@ -63,14 +63,11 @@ No invite → no account. Signup is not reachable without a valid code.
 
 ### Login
 
-After the account exists, two ways in. Same email = same account (link Google to that email).
+After the account exists, sign in with email and password. A verified email maps to one account.
 
 | Method | Behavior |
 |--------|----------|
-| **Google (Gmail)** | "Continue with Google" |
 | **Email + password** | Email and password. Forgot-password via email reset. |
-
-No other providers in v1.
 
 ### Profile
 
@@ -143,7 +140,7 @@ In-app water tracker.
 
 - Each container: **label** + **volume** (ml)
 - User can add, rename, change volume, delete
-- Suggested starters they can keep or edit: `Glass` 250 ml, `Bottle` 500 ml
+- No default containers; members add their own
 - **One tap** on a container adds that volume to today's water
 - Long-press / edit icon to change a container
 
@@ -335,8 +332,8 @@ Max one toast per action.
 
 | Screen | Purpose |
 |--------|---------|
-| Signup | Group code (or link) → Google or email/password → name + photo |
-| Login | Google or email/password |
+| Signup | Group code (or link) → email/password → name + photo |
+| Login | Email + password |
 | Today | Tracker: chips, water containers, diet button, post update, yesterday |
 | Water containers | Add / label / volume / delete saved cups |
 | Leaderboard | Current local day's required-challenges-achieved count |
@@ -443,7 +440,7 @@ Cannot type amounts onto someone else's day.
 
 | Slice | Ships |
 |-------|--------|
-| 1 | Reusable group invite (link + code), you as admin, Google + email/password, name + photo, Today |
+| 1 | Reusable group invite (link + code), you as admin, email/password, name + photo, Today |
 | 2 | Workout/reading chips + custom; water containers + tap-to-add; diet button (all quiet) |
 | 3 | Post update + photo (5 MB) + feed; reactions (defaults + custom palette); comments ≤256 |
 | 4 | Shared calendar from 2026-09-01; yesterday edit; day rollup |
@@ -487,7 +484,7 @@ Cannot type amounts onto someone else's day.
 | Weekly scoring | None; calendar weeks are display groupings only |
 | Optional goals | Personal; not scored |
 | Invite | You seed admin. **Reusable** group code + link |
-| Login | Google or email + password |
+| Login | Email + password |
 | Profile | Name + photo |
 | Leaderboard | Current local day's count of required challenges met. Resets at local midnight; ties use competition ranking. |
 | Reactions | Defaults 👍🔥😂❤️💪; each user can change their palette to any emoji |
@@ -536,8 +533,8 @@ Me (from avatar)
 | Page | Contents |
 |------|----------|
 | **Invite** | Type reusable group code, or land here from invite link (code prefilled) |
-| **Signup** | Google **or** email + password → display name + profile photo |
-| **Login** | Google **or** email + password |
+| **Signup** | Email + password → display name + profile photo |
+| **Login** | Email + password |
 | **Forgot password** | Email reset (not a tab; from Login) |
 
 Invalid code: stay on Invite. After signup → **Today**.
@@ -613,7 +610,7 @@ If this is **you**, show **Edit** → Me. No extra settings on other people.
 | Sheet | From | Contents |
 |-------|------|----------|
 | **Post update** | Today | Goal chips, amounts, containers, note, camera or upload (5 MB), post |
-| **Water containers** | Today | Add label + ml; edit; delete; reorder. Starters: Glass 250, Bottle 500 |
+| **Water containers** | Today | Add label + ml; edit; delete; reorder. No defaults |
 | **Yesterday** | Today or grid | Same tracker as Today, date locked to yesterday |
 
 ### Admin (push, you only)

@@ -2,14 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   createInviteIntentPayload,
-  createOAuthStatePayload,
   hashInviteCode,
   hashNonce,
   isInviteIntentRecordUsable,
   signInviteIntent,
-  signOAuthState,
   verifyInviteIntent,
-  verifyOAuthState,
 } from "@/features/auth/invite-intent";
 import {
   isAllowedInternalPath,
@@ -103,24 +100,6 @@ describe("W1 invite and redirect boundaries", () => {
         now.getTime(),
       ),
     ).toBe(false);
-  });
-
-  it("binds OAuth state to the invite nonce and expiry", () => {
-    const payload = createOAuthStatePayload({
-      inviteIntentId: "intent-3",
-      inviteCodeHash: hashInviteCode("REUSABLE-CODE"),
-      nonce: "nonce-that-is-long-enough",
-      now,
-    });
-    const token = signOAuthState(payload, secret);
-
-    expect(verifyOAuthState(token, secret, now.getTime())).toMatchObject({
-      inviteIntentId: "intent-3",
-      nonce: "nonce-that-is-long-enough",
-    });
-    expect(
-      verifyOAuthState(token, secret, now.getTime() + 15 * 60 * 1_000 + 1),
-    ).toBeNull();
   });
 
   it("allows only safe internal redirect paths", () => {

@@ -31,6 +31,13 @@ function shortDate(localDate: string): string {
   return month && day ? `${month}/${day}` : localDate;
 }
 
+function shortWeekday(localDate: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+  }).format(new Date(`${localDate}T12:00:00Z`));
+}
+
 export function CalendarGrid({ cells }: CalendarGridProps) {
   return (
     <Card aria-labelledby="person-calendar-title">
@@ -46,7 +53,7 @@ export function CalendarGrid({ cells }: CalendarGridProps) {
       ) : (
         <div
           aria-label="Required-goal calendar"
-          className="grid grid-cols-5 gap-2 sm:grid-cols-7"
+          className="grid grid-cols-7 gap-1 sm:gap-2"
           role="list"
         >
           {cells.map((cell) => (
@@ -57,15 +64,22 @@ export function CalendarGrid({ cells }: CalendarGridProps) {
               role="listitem"
               title={`${cell.localDate}: ${statusLabels[cell.status]}`}
             >
+              <span className="text-muted block text-[10px] uppercase">
+                {shortWeekday(cell.localDate)}
+              </span>
               <time
                 className="block text-xs font-semibold"
                 dateTime={cell.localDate}
               >
                 {shortDate(cell.localDate)}
               </time>
-              <span className="mt-1 block text-xs">
-                {statusLabels[cell.status]}
-              </span>
+              {cell.status === "unscored" ? (
+                <span className="sr-only">Not scored</span>
+              ) : (
+                <span className="mt-1 block text-xs">
+                  {statusLabels[cell.status]}
+                </span>
+              )}
               {cell.status !== "unscored" && cell.status !== "future" ? (
                 <span className="mt-1 block text-[11px] font-semibold tabular-nums">
                   {cell.metCount}/4

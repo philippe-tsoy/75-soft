@@ -10,6 +10,15 @@ interface GoalControlProps {
   children: ReactNode;
 }
 
+function formatAmount(value: number, unit: string | null | undefined): string {
+  if (unit === "ml") {
+    const liters = value / 1_000;
+    return `${Number.isInteger(liters) ? liters : liters.toFixed(2)} L`;
+  }
+
+  return `${value} ${unit ?? ""}`.trim();
+}
+
 export function GoalControl({
   title,
   progress,
@@ -18,7 +27,7 @@ export function GoalControl({
 }: GoalControlProps) {
   const amount =
     progress.amount !== undefined && progress.target !== undefined
-      ? `${progress.amount} / ${progress.target} ${progress.unit ?? ""}`
+      ? `${formatAmount(progress.amount, progress.unit)} / ${formatAmount(progress.target, progress.unit)}`
       : progress.met
         ? "Marked complete"
         : "Not marked complete";

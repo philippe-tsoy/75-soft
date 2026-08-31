@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useState,
   type Dispatch,
@@ -9,6 +10,7 @@ import {
 
 import { Button, Card, Input, Label } from "@/components/ui";
 import { DayApiError, requestDayApi } from "@/features/day-tracking/client";
+import { MAX_WATER_CONTAINER_LABEL_CHARACTERS } from "@/lib/config/75-soft";
 import type { ContainerDTO } from "@/lib/types";
 
 interface ContainerManagerProps {
@@ -32,6 +34,7 @@ function ContainerRow({
   onChange: Dispatch<SetStateAction<ContainerDTO[]>>;
   onError: (message: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const [label, setLabel] = useState(container.label);
   const [volumeMl, setVolumeMl] = useState(String(container.volumeMl));
   const [pending, setPending] = useState(false);
@@ -72,6 +75,7 @@ function ContainerRow({
       );
       setLabel(updated.label);
       setVolumeMl(String(updated.volumeMl));
+      void queryClient.invalidateQueries({ queryKey: ["containers"] });
     } catch (error) {
       onChange((current) =>
         current.map((item) => (item.id === previous.id ? previous : item)),
@@ -104,6 +108,7 @@ function ContainerRow({
           }
         },
       );
+      void queryClient.invalidateQueries({ queryKey: ["containers"] });
     } catch (error) {
       onChange((current) =>
         [...current, previous].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -126,6 +131,7 @@ function ContainerRow({
         aria-label={`${container.label} label`}
         disabled={pending}
         id={`container-label-${container.id}`}
+        maxLength={MAX_WATER_CONTAINER_LABEL_CHARACTERS}
         onChange={(event) => setLabel(event.target.value)}
         value={label}
       />
@@ -136,15 +142,29 @@ function ContainerRow({
         aria-label={`${container.label} volume in milliliters`}
         disabled={pending}
         id={`container-volume-${container.id}`}
+        inputMode="numeric"
         min={1}
         onChange={(event) => setVolumeMl(event.target.value)}
+        step={1}
         type="number"
         value={volumeMl}
       />
       <Button disabled={pending} type="submit" variant="secondary">
         Save
       </Button>
-      <Button disabled={pending} onClick={() => void remove()} variant="danger">
+      <Button
+        disabled={pending}
+        onClick={() => {
+          if (
+            window.confirm(
+              `Delete "${container.label}"? Existing water logs will be kept.`,
+            )
+          ) {
+            void remove();
+          }
+        }}
+        variant="danger"
+      >
         Delete
       </Button>
     </form>
@@ -156,8 +176,9 @@ export function ContainerManager({
   onContainersChange,
   onError,
 }: ContainerManagerProps) {
+  const queryClient = useQueryClient();
   const [label, setLabel] = useState("");
-  const [volumeMl, setVolumeMl] = useState("500");
+  const [volumeMl, setVolumeMl] = useState("");
   const [pending, setPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -197,6 +218,7 @@ export function ContainerManager({
       onContainersChange((current) =>
         current.map((item) => (item.id === optimisticId ? created : item)),
       );
+      void queryClient.invalidateQueries({ queryKey: ["containers"] });
       setLabel("");
     } catch (error) {
       onContainersChange((current) =>
@@ -246,6 +268,7 @@ export function ContainerManager({
         <Input
           disabled={pending}
           id="new-container-label"
+          maxLength={MAX_WATER_CONTAINER_LABEL_CHARACTERS}
           onChange={(event) => setLabel(event.target.value)}
           placeholder="Travel mug"
           value={label}
@@ -256,8 +279,10 @@ export function ContainerManager({
         <Input
           disabled={pending}
           id="new-container-volume"
+          inputMode="numeric"
           min={1}
           onChange={(event) => setVolumeMl(event.target.value)}
+          step={1}
           type="number"
           value={volumeMl}
         />

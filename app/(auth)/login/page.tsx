@@ -24,6 +24,7 @@ export default async function LoginPage({
             ? "Your password was updated. Sign in with the new password."
             : undefined
         }
+        next={firstValue(params.next)}
       />
     </AuthCard>
   );

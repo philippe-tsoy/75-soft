@@ -46,7 +46,7 @@ Acceptance:
 Tasks:
 
 - Create migrations for tables in `DATA_MODEL.md`.
-- Seed cohort, required-goal configuration, default reaction palette, containers, and achievements.
+- Seed the cohort, required-goal configuration, default reaction palette, and achievements; keep water containers member-created.
 - Add helper functions, rollup read functions, mutation RPCs, and indexes.
 - Enable RLS on every application table.
 - Create private `post-photos` bucket and server-controlled access path.
@@ -63,23 +63,21 @@ Acceptance:
 ## Phase 2 — Invite-gated auth and profiles
 
 **Depends on:** Phases 0–1  
-**Master slice:** reusable invite, admin, Google/email auth, name/photo
+**Master slice:** reusable invite, admin, email/password auth, name/photo
 
 Tasks:
 
 - Implement Invite page and reusable code validation.
 - Implement email/password signup with pending confirmation support.
-- Implement Google OAuth with signed invite intent and callback completion.
 - Implement login, logout, forgot password, and active-membership redirect.
 - Implement profile completion and profile photo upload.
-- Implement secure identity linking for Google/email accounts.
 
 Acceptance:
 
 - Invalid invite does not create an app profile or active membership.
 - Multiple users can use the same active code.
 - Rotating the code blocks new signup completion with the old code.
-- Email and Google signup produce one profile/membership and land on Today.
+- Email signup produces one profile/membership and lands on Today.
 - Existing members can log in without an invite.
 - Non-members see no group data.
 
@@ -92,7 +90,7 @@ Tasks:
 
 - Implement Today tracker for the four required goals.
 - Add positive custom amount validation and canonical unit conversion.
-- Add container CRUD, starter containers, and one-tap water events.
+- Add member-created container CRUD and one-tap water events.
 - Add diet transactional toggle.
 - Add operation-id idempotency and optimistic amount feedback.
 - Return fresh DayRollupDTO after every mutation.
@@ -223,7 +221,7 @@ Acceptance:
 Tasks:
 
 - Run full unit, component, browser, RLS, and migration tests.
-- Test photo cleanup, duplicate retries, session expiry, and OAuth failure paths.
+- Test photo cleanup, duplicate retries, session expiry, and password-reset callback paths.
 - Add rate limiting, security headers, error monitoring, and structured server logs.
 - Measure mobile loading and tap latency.
 - Configure production Auth redirect URLs, environment variables, backups, and rollback procedure.

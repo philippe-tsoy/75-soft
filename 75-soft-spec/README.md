@@ -59,8 +59,8 @@ Me (from avatar)
 ### Auth (no tabs)
 
 - **Invite** — reusable group code, or link with code prefilled
-- **Signup** — Google or email + password → name + photo
-- **Login** — Google or email + password
+- **Signup** — email + password → name + photo
+- **Login** — email + password
 - **Forgot password** — from Login
 
 After signup → **Today**.
@@ -88,7 +88,7 @@ Name, photo, own Person, optional goals, reaction palette, logout, password. **A
 ### Sheets
 
 - **Post update** — goals, amounts, note, photo (5 MB)
-- **Water containers** — label + ml; Glass 250 / Bottle 500 starters
+- **Water containers** — member-created label + ml; no default containers
 - **Yesterday** — Today’s tracker, date = yesterday only
 
 ### Admin (you)

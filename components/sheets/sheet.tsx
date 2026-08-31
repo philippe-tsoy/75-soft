@@ -10,6 +10,7 @@ interface SheetProps {
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  description?: string;
 }
 
 export function Sheet({
@@ -18,9 +19,16 @@ export function Sheet({
   onClose,
   children,
   className,
+  description,
 }: SheetProps) {
   const titleId = useId();
+  const descriptionId = useId();
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) {
@@ -30,7 +38,7 @@ export function Sheet({
     const previousActiveElement = document.activeElement as HTMLElement | null;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -65,14 +73,19 @@ export function Sheet({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
-    dialogRef.current?.focus();
+    const initialFocus =
+      dialogRef.current?.querySelector<HTMLElement>("[data-sheet-autofocus]") ??
+      dialogRef.current?.querySelector<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+    (initialFocus ?? dialogRef.current)?.focus();
 
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
       previousActiveElement?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open) {
     return null;
@@ -88,9 +101,10 @@ export function Sheet({
       />
       <section
         aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         aria-modal="true"
         className={cn(
-          "border-border bg-card relative max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border p-5 shadow-2xl sm:max-w-xl",
+          "border-border bg-card relative max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-w-xl",
           className,
         )}
         ref={dialogRef}
@@ -110,6 +124,11 @@ export function Sheet({
             ×
           </button>
         </div>
+        {description ? (
+          <p className="sr-only" id={descriptionId}>
+            {description}
+          </p>
+        ) : null}
         {children}
       </section>
     </div>

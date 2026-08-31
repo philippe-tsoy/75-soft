@@ -10,7 +10,7 @@ in [`75-soft-spec/`](./75-soft-spec/).
 3. Add the Supabase URL, publishable/anon key, service-role key, and a random
    invite-intent secret.
 4. Apply the numbered migrations in `database/migrations/` in order
-   (`0001_core.sql` through `0008_member_read_boundaries.sql`) to the Supabase
+   (`0001_core.sql` through `0009_remove_default_water_containers.sql`) to the Supabase
    project.
 5. Start the app with `npm run dev`.
 

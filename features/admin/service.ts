@@ -1,9 +1,14 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { hydrateMemberProfile } from "@/features/board/database";
 import { createFeedScoringAdapter, type FeedClient } from "@/features/feed";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth/access";
 import { HttpError } from "@/lib/http";
+import type { ProfileDTO } from "@/lib/types";
+import type { Database } from "@/lib/supabase/database.types";
 
 import {
   createAdminRequestClient,
@@ -169,24 +174,36 @@ async function listMembersWithClient(
     ]),
   );
 
-  return activeMemberships.flatMap((membership) => {
-    const profile = profilesById.get(membership.user_id);
-    if (!profile) {
-      return [];
-    }
+  const rows = await Promise.all(
+    activeMemberships.map(async (membership) => {
+      const profile = profilesById.get(membership.user_id);
+      if (!profile) {
+        return null;
+      }
 
-    return [
-      {
+      const profileDto: ProfileDTO = {
         id: profile.id,
         displayName: profile.display_name,
         avatarUrl: null,
+      };
+      const hydratedProfile = await hydrateMemberProfile(
+        client as unknown as SupabaseClient<Database>,
+        profileDto,
+      );
+
+      return {
+        id: profile.id,
+        displayName: profile.display_name,
+        avatarUrl: hydratedProfile.avatarUrl,
         timezone: profile.timezone,
         role: membership.role as MembershipRole,
         joinedAt: membership.joined_at,
         joinLocalDate: membership.join_local_date,
-      },
-    ];
-  });
+      };
+    }),
+  );
+
+  return rows.flatMap((row) => (row ? [row] : []));
 }
 
 async function listAuditWithClient(

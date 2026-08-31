@@ -95,7 +95,7 @@ Cover:
 - today/yesterday/older/future/pre-join date authorization;
 - duplicate operation id behavior;
 - stale or invalid invite intents;
-- OAuth callback state mismatch;
+- password-reset callback state and redirect validation;
 - comment length measured by user-visible characters;
 - reaction not in current palette;
 - optional goal belonging to another user;

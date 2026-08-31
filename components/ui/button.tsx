@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,21 +16,22 @@ const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
     "bg-red-700 text-white shadow-sm hover:bg-red-800 focus-visible:ring-red-700",
 };
 
-export function Button({
-  className,
-  variant = "primary",
-  type = "button",
-  ...props
-}: ButtonProps) {
-  return (
-    <button
-      className={cn(
-        "inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-        variants[variant],
-        className,
-      )}
-      type={type}
-      {...props}
-    />
-  );
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    { className, variant = "primary", type = "button", ...props },
+    ref,
+  ) {
+    return (
+      <button
+        className={cn(
+          "inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+          variants[variant],
+          className,
+        )}
+        ref={ref}
+        type={type}
+        {...props}
+      />
+    );
+  },
+);

@@ -165,7 +165,6 @@ app/api/profile/route.ts
 
 - Invite validation and signed/short-lived signup intent;
 - email/password signup and confirmation;
-- Google OAuth callback and identity-linking flow;
 - login/logout/password reset;
 - active-member redirects and removed-member denial;
 - profile name, photo, and timezone completion/editing;

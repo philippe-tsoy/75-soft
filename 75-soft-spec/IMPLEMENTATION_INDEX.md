@@ -60,7 +60,7 @@ W0 is the only required serial foundation. W1–W8 use the frozen common contrac
 
 These rules must be enforced on the server and, where practical, in the database. Client checks are for feedback only.
 
-1. A user cannot create an app account or complete OAuth signup without a valid reusable group invite.
+1. A user cannot create an app account without a valid reusable group invite.
 2. Only an active group member can read group data or mutate their own data.
 3. Members can mutate only their own day, optional goals, profile, containers, posts, comments, and reactions.
 4. A member can write only today or yesterday in that member's local timezone.

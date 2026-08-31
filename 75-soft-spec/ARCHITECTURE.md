@@ -43,7 +43,7 @@
                          └──────────────┘
 ```
 
-The browser may use Supabase Auth's client methods for sign-in and OAuth initiation. Application data mutations and reads go through typed route handlers so that validation, audit behavior, and response shapes are consistent.
+The browser may use Supabase Auth's client methods for email/password sign-in. Application data mutations and reads go through typed route handlers so that validation, audit behavior, and response shapes are consistent.
 
 ## 3. Repository structure
 

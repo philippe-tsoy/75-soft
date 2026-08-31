@@ -18,16 +18,6 @@ export interface SignedInviteIntentPayload {
   exp: number;
 }
 
-export interface SignedOAuthStatePayload {
-  v: 1;
-  purpose: "oauth";
-  inviteIntentId: string | null;
-  inviteCodeHash: string | null;
-  createdAt: string;
-  nonce: string;
-  exp: number;
-}
-
 export interface CookieWriter {
   cookies: {
     set(
@@ -90,11 +80,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isValidCommonPayload(
   value: unknown,
-  purpose: "invite" | "oauth",
+  purpose: "invite",
   now: number,
 ): value is Record<string, unknown> & {
   v: 1;
-  purpose: "invite" | "oauth";
+  purpose: "invite";
   createdAt: string;
   nonce: string;
   exp: number;
@@ -218,74 +208,6 @@ export function verifyInviteIntent(
     }
 
     return payload as unknown as SignedInviteIntentPayload;
-  } catch {
-    return null;
-  }
-}
-
-export function createOAuthStatePayload(input: {
-  inviteIntentId: string | null;
-  inviteCodeHash: string | null;
-  nonce: string;
-  now?: Date;
-  ttlSeconds?: number;
-}): SignedOAuthStatePayload {
-  const now = input.now ?? new Date();
-  const ttlSeconds = input.ttlSeconds ?? INVITE_INTENT_TTL_SECONDS;
-
-  return {
-    v: 1,
-    purpose: "oauth",
-    inviteIntentId: input.inviteIntentId,
-    inviteCodeHash: input.inviteCodeHash,
-    createdAt: now.toISOString(),
-    nonce: input.nonce,
-    exp: now.getTime() + ttlSeconds * 1_000,
-  };
-}
-
-export function signOAuthState(
-  payload: SignedOAuthStatePayload,
-  secret: string,
-): string {
-  return signPayload(payload, secret);
-}
-
-export function verifyOAuthState(
-  token: string,
-  secret: string,
-  now = Date.now(),
-): SignedOAuthStatePayload | null {
-  const [encodedPayload, signature, ...extra] = token.split(".");
-  if (!encodedPayload || !signature || extra.length > 0) {
-    return null;
-  }
-
-  try {
-    if (!hasValidSignature(encodedPayload, signature, secret)) {
-      return null;
-    }
-
-    const payload = decodePayload(encodedPayload);
-    if (!isValidCommonPayload(payload, "oauth", now) || !isRecord(payload)) {
-      return null;
-    }
-
-    const hasInviteIntent = payload.inviteIntentId !== null;
-    const hasInviteDigest = payload.inviteCodeHash !== null;
-    if (
-      hasInviteIntent !== hasInviteDigest ||
-      (hasInviteIntent &&
-        (typeof payload.inviteIntentId !== "string" ||
-          !payload.inviteIntentId)) ||
-      (hasInviteDigest &&
-        (typeof payload.inviteCodeHash !== "string" ||
-          !/^[a-f0-9]{64}$/u.test(payload.inviteCodeHash)))
-    ) {
-      return null;
-    }
-
-    return payload as unknown as SignedOAuthStatePayload;
   } catch {
     return null;
   }

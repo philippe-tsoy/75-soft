@@ -20,23 +20,6 @@ interface ApiResponse<T> {
   };
 }
 
-interface GoogleButtonProps {
-  next?: string;
-}
-
-export function GoogleButton({ next = "/today" }: GoogleButtonProps) {
-  const href = `/api/auth/google?next=${encodeURIComponent(next)}`;
-
-  return (
-    <a
-      className="border-border bg-card text-foreground hover:bg-surface-accent focus-visible:ring-primary inline-flex min-h-11 w-full items-center justify-center rounded-xl border px-4 py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-      href={href}
-    >
-      Continue with Google
-    </a>
-  );
-}
-
 function StatusMessage({
   children,
   tone = "error",
@@ -46,13 +29,13 @@ function StatusMessage({
 }) {
   return (
     <p
-      aria-live="polite"
+      aria-live={tone === "error" ? "assertive" : "polite"}
       className={
         tone === "success"
           ? "bg-surface-accent rounded-xl px-3 py-2 text-sm"
           : "rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800"
       }
-      role="status"
+      role={tone === "error" ? "alert" : "status"}
     >
       {children}
     </p>
@@ -89,7 +72,9 @@ export function InviteForm({
   const [message, setMessage] = useState<string | null>(
     initialError === "membership_required"
       ? "Your account needs an active membership to continue."
-      : null,
+      : initialError
+        ? "We could not validate your invite. Please try again."
+        : null,
   );
   const initialValidationStarted = useRef(false);
 
@@ -280,6 +265,7 @@ export function SignupForm() {
         <Label htmlFor="display-name">Display name</Label>
         <Input
           id="display-name"
+          maxLength={80}
           name="displayName"
           onChange={(event) => setDisplayName(event.target.value)}
           required
@@ -304,6 +290,7 @@ export function SignupForm() {
         <Label htmlFor="avatar">Profile photo (optional)</Label>
         <Input
           accept="image/jpeg,image/png,image/webp"
+          capture="user"
           id="avatar"
           name="avatar"
           onChange={(event) => setAvatar(event.target.files?.[0] ?? null)}
@@ -313,7 +300,14 @@ export function SignupForm() {
       <Button className="w-full" disabled={busy} type="submit">
         {busy ? "Creating account…" : "Create account"}
       </Button>
-      <GoogleButton next="/today" />
+      {success ? (
+        <p className="text-muted text-center text-sm">
+          Already confirmed?{" "}
+          <Link className="text-primary font-semibold" href="/login">
+            Sign in
+          </Link>
+        </p>
+      ) : null}
       <p className="text-muted text-center text-sm">
         Have an invite?{" "}
         <Link className="text-primary font-semibold" href="/invite">
@@ -327,9 +321,11 @@ export function SignupForm() {
 export function LoginForm({
   initialError,
   initialMessage,
+  next = "/today",
 }: {
   initialError?: string;
   initialMessage?: string;
+  next?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -356,7 +352,7 @@ export function LoginForm({
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, next: "/today" }),
+        body: JSON.stringify({ email, password, next }),
       });
       const body = await readResponse<{
         state: "active" | "no_membership";
@@ -415,7 +411,6 @@ export function LoginForm({
       <Button className="w-full" disabled={busy} type="submit">
         {busy ? "Signing in…" : "Sign in"}
       </Button>
-      <GoogleButton next="/today" />
       <div className="flex justify-between gap-4 text-sm">
         <Link className="text-primary font-semibold" href="/forgot-password">
           Forgot password?
@@ -432,11 +427,13 @@ export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"error" | "success">("error");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setMessage(null);
+    setMessageTone("error");
     try {
       const response = await fetch("/api/auth/password-reset", {
         method: "POST",
@@ -450,11 +447,13 @@ export function ForgotPasswordForm() {
         );
         return;
       }
+      setMessageTone("success");
       setMessage(
         body.data?.message ??
           "If an account exists for that email, a reset link is on its way.",
       );
     } catch {
+      setMessageTone("error");
       setMessage("Unable to send a reset link right now. Try again.");
     } finally {
       setBusy(false);
@@ -463,7 +462,9 @@ export function ForgotPasswordForm() {
 
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
-      {message ? <StatusMessage tone="success">{message}</StatusMessage> : null}
+      {message ? (
+        <StatusMessage tone={messageTone}>{message}</StatusMessage>
+      ) : null}
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
@@ -554,6 +555,82 @@ export function ResetPasswordForm() {
   );
 }
 
+export function ChangePasswordForm() {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    setSuccess(false);
+
+    try {
+      const response = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password, confirmPassword }),
+      });
+      const body = await readResponse<{ state: "updated" }>(response);
+      if (!response.ok || !body.data) {
+        setMessage(
+          getErrorMessage(body) ?? "Unable to update your password right now.",
+        );
+        return;
+      }
+
+      setPassword("");
+      setConfirmPassword("");
+      setSuccess(true);
+      setMessage("Password updated.");
+    } catch {
+      setMessage("Unable to update your password right now. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="space-y-4" onSubmit={onSubmit}>
+      {message ? (
+        <StatusMessage tone={success ? "success" : "error"}>
+          {message}
+        </StatusMessage>
+      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="change-password">New password</Label>
+        <Input
+          autoComplete="new-password"
+          id="change-password"
+          minLength={8}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+          type="password"
+          value={password}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="change-confirm-password">Confirm password</Label>
+        <Input
+          autoComplete="new-password"
+          id="change-confirm-password"
+          minLength={8}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          required
+          type="password"
+          value={confirmPassword}
+        />
+      </div>
+      <Button disabled={busy} type="submit" variant="secondary">
+        {busy ? "Saving…" : "Change password"}
+      </Button>
+    </form>
+  );
+}
+
 export function CompleteProfileForm() {
   const router = useRouter();
   const [displayName, setDisplayName] = useState("");
@@ -601,6 +678,7 @@ export function CompleteProfileForm() {
         <Label htmlFor="display-name">Display name</Label>
         <Input
           id="display-name"
+          maxLength={80}
           onChange={(event) => setDisplayName(event.target.value)}
           required
           value={displayName}
@@ -623,6 +701,7 @@ export function CompleteProfileForm() {
         <Label htmlFor="avatar">Profile photo (optional)</Label>
         <Input
           accept="image/jpeg,image/png,image/webp"
+          capture="user"
           id="avatar"
           onChange={(event) => setAvatar(event.target.files?.[0] ?? null)}
           type="file"
@@ -638,22 +717,38 @@ export function CompleteProfileForm() {
 export function LogoutButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function onClick() {
     setBusy(true);
+    setError(null);
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
-      if (response.ok) {
-        router.replace("/login");
+      if (!response.ok) {
+        throw new Error("Unable to sign out right now.");
       }
+      router.replace("/login");
+    } catch (logoutError) {
+      setError(
+        logoutError instanceof Error
+          ? logoutError.message
+          : "Unable to sign out right now.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Button disabled={busy} onClick={onClick} variant="secondary">
-      {busy ? "Signing out…" : "Sign out"}
-    </Button>
+    <div className="space-y-2">
+      <Button disabled={busy} onClick={onClick} variant="secondary">
+        {busy ? "Signing out…" : "Sign out"}
+      </Button>
+      {error ? (
+        <p aria-live="assertive" className="text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

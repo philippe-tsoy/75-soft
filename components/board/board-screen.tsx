@@ -9,7 +9,7 @@ import {
   LoadingState,
   UnauthorizedState,
 } from "@/components/feedback/async-state";
-import { Card, CardHeader, CardTitle } from "@/components/ui";
+import { Button, Card, CardHeader, CardTitle } from "@/components/ui";
 import { queryKeys } from "@/lib/query-keys";
 import type { BoardEntryDTO } from "@/lib/types";
 
@@ -57,15 +57,24 @@ export function BoardScreen() {
 
   return (
     <div className="space-y-5 py-6">
-      <div>
-        <p className="text-primary text-sm font-semibold tracking-wide">
-          Daily standings
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold">Board</h1>
-        <p className="text-muted mt-2 text-sm leading-6">
-          Each member is scored on their own current local date. Ties share a
-          rank.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-primary text-sm font-semibold tracking-wide">
+            Daily standings
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold">Board</h1>
+          <p className="text-muted mt-2 text-sm leading-6">
+            Each member is scored on their own current local date. Ties share a
+            rank.
+          </p>
+        </div>
+        <Button
+          disabled={board.isFetching}
+          onClick={() => void board.refetch()}
+          variant="secondary"
+        >
+          {board.isFetching ? "Refreshing…" : "Refresh"}
+        </Button>
       </div>
 
       {board.isPending ? <LoadingState label="Loading today’s Board…" /> : null}

@@ -1,22 +1,32 @@
 import { FeedScreen } from "@/components/feed";
 import { requireActiveMember } from "@/lib/auth/access";
 import { createFeedClient, listOwnedOptionalGoals } from "@/features/feed";
-import type { OptionalGoalDTO } from "@/lib/types";
+import { createDayTrackingServices } from "@/features/day-tracking";
+import type { ContainerDTO } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function FeedPage() {
-  let optionalGoals: OptionalGoalDTO[] = [];
+  const access = await requireActiveMember();
+  const [optionalGoalsResult, containerResult] = await Promise.allSettled([
+    listOwnedOptionalGoals(await createFeedClient(), access.user.id),
+    (async (): Promise<ContainerDTO[]> => {
+      const { containers } = await createDayTrackingServices();
+      return containers.listContainers(access.user.id);
+    })(),
+  ]);
 
-  try {
-    const access = await requireActiveMember();
-    const client = await createFeedClient();
-    optionalGoals = await listOwnedOptionalGoals(client, access.user.id);
-  } catch {
-    // The protected app layout owns access redirects. An unavailable optional
-    // goal table should not prevent the shared feed from rendering.
-    optionalGoals = [];
-  }
+  const optionalGoals =
+    optionalGoalsResult.status === "fulfilled" ? optionalGoalsResult.value : [];
+  const containers =
+    containerResult.status === "fulfilled" ? containerResult.value : [];
 
-  return <FeedScreen optionalGoals={optionalGoals} />;
+  return (
+    <FeedScreen
+      containers={containers}
+      containersUnavailable={containerResult.status === "rejected"}
+      optionalGoals={optionalGoals}
+      optionalGoalsUnavailable={optionalGoalsResult.status === "rejected"}
+    />
+  );
 }

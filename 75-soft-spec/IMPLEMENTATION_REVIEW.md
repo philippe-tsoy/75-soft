@@ -60,7 +60,6 @@ These are not implementation bugs; the master spec leaves them underspecified or
 7. **Timezone changes.** The subspec preserves historical local dates and uses the new timezone for future activity. Confirm this behavior for a user who changes timezone around midnight.
 8. **Technical limits not in the master.** A maximum note length, profile-photo byte limit, reaction-palette size, display-name length, invite format, and rate limits still need concrete values. They should be centralized and documented as technical constraints, not silently treated as product rules.
 9. **Photo upload behavior.** The subspec uses a pending-post → Storage upload → published-post flow with cleanup. Confirm that a post should not appear in the feed until the photo is fully uploaded.
-10. **Google signup profile photo.** The master requires name plus photo, but Google may provide a provider avatar while email signup needs a file upload. Confirm whether a provider avatar satisfies initial signup or whether every user must upload/capture a photo.
 
 ## 5. Highest technical risks
 
@@ -72,7 +71,6 @@ These are not implementation bugs; the master spec leaves them underspecified or
 | RLS leakage | Group privacy is the product boundary | RLS matrix, aggregate RPCs, signed private photos, real-context tests |
 | Storage/database split | Storage has no database transaction | Pending status, compensation, cleanup monitoring |
 | Unbounded derived queries | Calendar/Person reads can rescan historical events | Indexes first; query plans; introduce safe caching only after measurement |
-| OAuth invite bypass | Provider auth can exist before app membership | Signed intent, callback revalidation, no membership without invite |
 
 ## 6. Recommended next step
 

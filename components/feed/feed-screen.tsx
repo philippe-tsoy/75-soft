@@ -5,19 +5,23 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { EmptyState, ErrorState, LoadingState } from "@/components/feedback";
 import { Button } from "@/components/ui";
 import { DEFAULT_REACTION_PALETTE } from "@/lib/config/75-soft";
 import { queryKeys } from "@/lib/query-keys";
-import type { OptionalGoalDTO, PostDTO } from "@/lib/types";
+import type { ContainerDTO, OptionalGoalDTO, PostDTO } from "@/lib/types";
 
 import { PostCard } from "./post-card";
 import { PostComposer } from "./post-composer";
 
 interface FeedScreenProps {
   optionalGoals: OptionalGoalDTO[];
+  containers?: ContainerDTO[];
+  optionalGoalsUnavailable?: boolean;
+  containersUnavailable?: boolean;
 }
 
 interface FeedResponse {
@@ -65,8 +69,14 @@ async function fetchReactionPalette(): Promise<string[]> {
   return data?.emoji ?? [...DEFAULT_REACTION_PALETTE];
 }
 
-export function FeedScreen({ optionalGoals }: FeedScreenProps) {
+export function FeedScreen({
+  optionalGoals,
+  containers = [],
+  optionalGoalsUnavailable = false,
+  containersUnavailable = false,
+}: FeedScreenProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [composerOpen, setComposerOpen] = useState(false);
   const feedQuery = useInfiniteQuery({
     queryKey: queryKeys.feed(null),
@@ -83,6 +93,12 @@ export function FeedScreen({ optionalGoals }: FeedScreenProps) {
   const posts = feedQuery.data?.pages.flatMap((page) => page.data) ?? [];
   const invalidateFeed = () => {
     void queryClient.invalidateQueries({ queryKey: ["feed"] });
+    void queryClient.invalidateQueries({ queryKey: ["day"] });
+    void queryClient.invalidateQueries({ queryKey: ["group-strip"] });
+    void queryClient.invalidateQueries({ queryKey: ["board"] });
+    void queryClient.invalidateQueries({ queryKey: ["person"] });
+    void queryClient.invalidateQueries({ queryKey: ["achievements"] });
+    router.refresh();
   };
 
   return (
@@ -101,6 +117,19 @@ export function FeedScreen({ optionalGoals }: FeedScreenProps) {
           Post update
         </Button>
       </div>
+
+      {optionalGoalsUnavailable || containersUnavailable ? (
+        <div
+          className="border-border bg-surface-accent rounded-2xl border p-3 text-sm"
+          role="status"
+        >
+          <p className="font-semibold">Some post helpers are unavailable.</p>
+          <p className="text-muted mt-1">
+            You can still publish required challenges. Refresh later to load
+            optional goals and saved water containers.
+          </p>
+        </div>
+      ) : null}
 
       {feedQuery.isPending ? <LoadingState label="Loading feed…" /> : null}
       {feedQuery.isError ? (
@@ -143,6 +172,7 @@ export function FeedScreen({ optionalGoals }: FeedScreenProps) {
         onPosted={invalidateFeed}
         open={composerOpen}
         optionalGoals={optionalGoals}
+        containers={containers}
       />
     </div>
   );

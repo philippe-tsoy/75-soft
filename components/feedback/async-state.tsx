@@ -4,7 +4,7 @@ export function Skeleton({ className = "h-20" }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`bg-surface-accent animate-pulse rounded-2xl ${className}`}
+      className={`bg-surface-accent motion-safe:animate-pulse rounded-2xl ${className}`}
     />
   );
 }
@@ -13,9 +13,14 @@ export function LoadingState({ label = "Loading…" }: { label?: string }) {
   return (
     <div
       aria-live="polite"
-      className="border-border bg-card text-muted rounded-2xl border p-6 text-center text-sm"
+      className="border-border bg-card text-muted flex items-center justify-center gap-3 rounded-2xl border p-6 text-center text-sm"
+      role="status"
     >
-      {label}
+      <span
+        aria-hidden="true"
+        className="border-primary motion-safe:animate-spin h-4 w-4 rounded-full border-2 border-t-transparent"
+      />
+      <span>{label}</span>
     </div>
   );
 }

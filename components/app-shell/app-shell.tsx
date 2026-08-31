@@ -4,20 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { MemberAvatar } from "@/components/board/member-avatar";
+import type { ProfileDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const tabs = [
+  { href: "/board", label: "Board" },
   { href: "/today", label: "Today" },
   { href: "/feed", label: "Feed" },
-  { href: "/board", label: "Board" },
 ] as const;
 
 interface AppShellProps {
   children: ReactNode;
   dayNumber?: number;
+  localDate?: string;
+  profile?: Pick<ProfileDTO, "displayName" | "avatarUrl">;
 }
 
-export function AppShell({ children, dayNumber }: AppShellProps) {
+export function AppShell({
+  children,
+  dayNumber,
+  localDate,
+  profile,
+}: AppShellProps) {
   const pathname = usePathname();
 
   return (
@@ -27,16 +36,26 @@ export function AppShell({ children, dayNumber }: AppShellProps) {
           <p className="text-primary text-sm font-semibold tracking-wide">
             75 Soft
           </p>
-          {dayNumber ? (
-            <p className="text-muted text-xs">Day {dayNumber}</p>
-          ) : null}
+          <div className="text-muted flex items-center gap-2 text-xs">
+            {localDate ? <time dateTime={localDate}>{localDate}</time> : null}
+            {dayNumber && dayNumber > 0 ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Day {dayNumber}</span>
+              </>
+            ) : null}
+          </div>
         </div>
         <Link
           aria-label="Open Me"
-          className="border-border bg-card text-primary focus-visible:ring-primary flex min-h-11 min-w-11 items-center justify-center rounded-full border text-sm font-semibold focus-visible:ring-2"
+          className="border-border bg-card text-primary focus-visible:ring-primary flex min-h-11 min-w-11 items-center justify-center rounded-full border text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none"
           href="/me"
         >
-          Me
+          {profile ? (
+            <MemberAvatar className="h-10 w-10" profile={profile} />
+          ) : (
+            "Me"
+          )}
         </Link>
       </header>
 
@@ -57,10 +76,10 @@ export function AppShell({ children, dayNumber }: AppShellProps) {
               <Link
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "focus-visible:ring-primary flex min-h-11 items-center justify-center rounded-xl text-sm font-semibold transition-colors focus-visible:ring-2",
+                  "focus-visible:ring-primary flex min-h-11 items-center justify-center rounded-xl border-b-2 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none",
                   active
-                    ? "bg-surface-accent text-primary"
-                    : "text-muted hover:bg-surface-accent hover:text-foreground",
+                    ? "border-primary bg-surface-accent text-primary"
+                    : "text-muted hover:bg-surface-accent hover:text-foreground border-transparent",
                 )}
                 href={tab.href}
                 key={tab.href}

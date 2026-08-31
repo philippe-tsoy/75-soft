@@ -253,7 +253,7 @@ Show active containers in order with:
 - reorder;
 - add container.
 
-Seed new members with `Glass` 250 ml and `Bottle` 500 ml. Deleting a container does not change historical water logs.
+Do not seed containers for new members. Members create their own containers. Deleting a container does not change historical water logs.
 
 ## 11. Admin screen
 
@@ -293,7 +293,6 @@ Admin cannot type amounts onto another member's day.
 
 ### Signup
 
-- Google continuation;
 - email/password form;
 - display name;
 - profile photo;
@@ -302,7 +301,6 @@ Admin cannot type amounts onto another member's day.
 
 ### Login
 
-- Google continuation;
 - email/password;
 - Forgot password link.
 

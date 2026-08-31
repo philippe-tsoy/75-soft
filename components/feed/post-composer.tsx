@@ -10,12 +10,16 @@ import {
   MAX_NOTE_CHARACTERS,
   MAX_POST_PHOTO_BYTES,
   POST_PHOTO_MIME_TYPES,
+  READING_TARGET_PAGES,
   REQUIRED_GOALS,
   REQUIRED_GOAL_KEYS,
+  WATER_TARGET_ML,
+  WORKOUT_TARGET_MINUTES,
 } from "@/lib/config/75-soft";
 import { validateImage } from "@/lib/storage";
 import type {
   AchievementDTO,
+  ContainerDTO,
   OptionalGoalDTO,
   RequiredGoalKey,
 } from "@/lib/types";
@@ -25,6 +29,8 @@ type AmountGoalKey = Exclude<RequiredGoalKey, "diet">;
 interface PostComposerProps {
   open: boolean;
   optionalGoals: OptionalGoalDTO[];
+  containers?: ContainerDTO[];
+  allowYesterday?: boolean;
   onClose: () => void;
   onPosted: () => void;
 }
@@ -50,16 +56,16 @@ interface PostMutationPayload {
 
 function initialAmounts(): Amounts {
   return {
-    workout: "1",
-    water: "250",
-    reading: "1",
+    workout: String(WORKOUT_TARGET_MINUTES),
+    water: String(WATER_TARGET_ML / 1_000),
+    reading: String(READING_TARGET_PAGES),
   };
 }
 
 function initialUnits(): Units {
   return {
     workout: "minutes",
-    water: "ml",
+    water: "l",
     reading: "pages",
   };
 }
@@ -82,6 +88,8 @@ function photoErrorMessage(error: "unsupported_type" | "too_large" | "empty") {
 export function PostComposer({
   open,
   optionalGoals,
+  containers = [],
+  allowYesterday = true,
   onClose,
   onPosted,
 }: PostComposerProps) {
@@ -176,9 +184,17 @@ export function PostComposer({
           }
 
           const amount = Number(amounts[key]);
-          if (!Number.isSafeInteger(amount) || amount <= 0) {
+          const normalizedAmount =
+            key === "water" && units.water === "l" ? amount * 1_000 : amount;
+          if (
+            !Number.isFinite(amount) ||
+            amount <= 0 ||
+            !Number.isSafeInteger(normalizedAmount)
+          ) {
             throw new Error(
-              `${REQUIRED_GOALS[key].label} needs a whole number.`,
+              key === "water"
+                ? "Water must resolve to a whole number of milliliters."
+                : `${REQUIRED_GOALS[key].label} needs a whole number.`,
             );
           }
 
@@ -282,6 +298,7 @@ export function PostComposer({
             <Label htmlFor="post-local-date">Day</Label>
             <select
               className="border-border bg-card text-foreground focus-visible:ring-primary min-h-11 w-full rounded-xl border px-3 py-2 text-sm outline-none focus-visible:ring-2"
+              data-sheet-autofocus
               id="post-local-date"
               onChange={(event) =>
                 setLocalDate(event.target.value as "today" | "yesterday")
@@ -289,7 +306,9 @@ export function PostComposer({
               value={localDate}
             >
               <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
+              <option disabled={!allowYesterday} value="yesterday">
+                {allowYesterday ? "Yesterday" : "Yesterday (not available yet)"}
+              </option>
             </select>
             <p className="text-muted text-xs">
               The server checks your local date and the active challenge window.
@@ -322,46 +341,103 @@ export function PostComposer({
                       {REQUIRED_GOALS[key].label}
                     </button>
                     {selected && key !== "diet" ? (
-                      <div className="mt-3 flex gap-2">
-                        <Label
-                          className="sr-only"
-                          htmlFor={`post-${key}-amount`}
-                        >
-                          {REQUIRED_GOALS[key].label} amount
-                        </Label>
-                        <Input
-                          id={`post-${key}-amount`}
-                          min="1"
-                          onChange={(event) =>
-                            setAmounts((current) => ({
-                              ...current,
-                              [key]: event.target.value,
-                            }))
-                          }
-                          type="number"
-                          value={amounts[key as AmountGoalKey]}
-                        />
-                        {key === "water" ? (
-                          <select
-                            aria-label="Water unit"
-                            className="border-border bg-card min-h-11 rounded-xl border px-3 text-sm"
+                      <>
+                        <div className="mt-3 flex gap-2">
+                          <Label
+                            className="sr-only"
+                            htmlFor={`post-${key}-amount`}
+                          >
+                            {REQUIRED_GOALS[key].label} amount
+                          </Label>
+                          <Input
+                            id={`post-${key}-amount`}
+                            inputMode={
+                              key === "water" && units.water === "l"
+                                ? "decimal"
+                                : "numeric"
+                            }
+                            min="1"
                             onChange={(event) =>
-                              setUnits((current) => ({
+                              setAmounts((current) => ({
                                 ...current,
-                                water: event.target.value as "ml" | "l",
+                                [key]: event.target.value,
                               }))
                             }
-                            value={units.water}
-                          >
-                            <option value="ml">ml</option>
-                            <option value="l">L</option>
-                          </select>
-                        ) : (
-                          <span className="text-muted flex items-center px-2 text-sm">
-                            {REQUIRED_GOALS[key].unit}
-                          </span>
-                        )}
-                      </div>
+                            step={
+                              key === "water" && units.water === "l"
+                                ? "any"
+                                : "1"
+                            }
+                            type="number"
+                            value={amounts[key as AmountGoalKey]}
+                          />
+                          {key === "water" ? (
+                            <select
+                              aria-label="Water unit"
+                              className="border-border bg-card min-h-11 rounded-xl border px-3 text-sm"
+                              onChange={(event) =>
+                                setUnits((current) => ({
+                                  ...current,
+                                  water: event.target.value as "ml" | "l",
+                                }))
+                              }
+                              value={units.water}
+                            >
+                              <option value="ml">ml</option>
+                              <option value="l">L</option>
+                            </select>
+                          ) : (
+                            <span className="text-muted flex items-center px-2 text-sm">
+                              {REQUIRED_GOALS[key].unit}
+                            </span>
+                          )}
+                        </div>
+                        {key === "workout" || key === "reading" ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {[
+                              key === "workout" ? 15 : 5,
+                              key === "workout" ? 30 : 10,
+                            ].map((quickAmount) => (
+                              <Button
+                                key={quickAmount}
+                                onClick={() =>
+                                  setAmounts((current) => ({
+                                    ...current,
+                                    [key]: String(quickAmount),
+                                  }))
+                                }
+                                type="button"
+                                variant="secondary"
+                              >
+                                Use {quickAmount}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {key === "water" && containers.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {containers.map((container) => (
+                              <Button
+                                key={container.id}
+                                onClick={() => {
+                                  setAmounts((current) => ({
+                                    ...current,
+                                    water: String(container.volumeMl),
+                                  }));
+                                  setUnits((current) => ({
+                                    ...current,
+                                    water: "ml",
+                                  }));
+                                }}
+                                type="button"
+                                variant="secondary"
+                              >
+                                Use {container.label} ({container.volumeMl} ml)
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                 );

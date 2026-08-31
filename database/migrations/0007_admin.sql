@@ -135,7 +135,7 @@ begin
         rotated_at = now()
     where id = previous_invite.id;
 
-    -- Existing signup/OAuth intents are bound to the prior digest. Rotation
+    -- Existing signup intents are bound to the prior digest. Rotation
     -- invalidates them immediately, even when they have not expired yet.
     update public.signup_intents
     set invalidated_at = coalesce(invalidated_at, now())

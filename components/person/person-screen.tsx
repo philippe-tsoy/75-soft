@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -67,13 +66,6 @@ export function PersonScreen({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-5 py-6">
-      <Link
-        className="text-primary focus-visible:ring-primary inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none"
-        href="/board"
-      >
-        ← Back to Board
-      </Link>
-
       {person.isPending ? <LoadingState label="Loading Person view…" /> : null}
 
       {person.isError && person.error instanceof PersonRequestError ? (
