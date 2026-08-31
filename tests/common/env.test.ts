@@ -49,6 +49,22 @@ describe("environment configuration", () => {
     expect(() => getPublicEnv()).toThrow(/NEXT_PUBLIC_SUPABASE_URL/);
   });
 
+  it("keeps public env readable when the app origin omits a scheme", () => {
+    setValidEnv();
+    process.env.NEXT_PUBLIC_APP_URL = "75-soft-seven.vercel.app";
+
+    expect(getPublicEnv().NEXT_PUBLIC_APP_URL).toBe("75-soft-seven.vercel.app");
+  });
+
+  it("names the missing variables so a deployment can be diagnosed", () => {
+    setValidEnv();
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    expect(() => getServerEnv()).toThrow(
+      /Server configuration is incomplete: SUPABASE_SERVICE_ROLE_KEY/,
+    );
+  });
+
   it("requires server-only invite and service-role values", () => {
     setValidEnv();
     delete process.env.INVITE_INTENT_SECRET;

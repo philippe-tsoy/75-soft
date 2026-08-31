@@ -182,6 +182,21 @@ describe("admin migration audit and invalidation hooks", () => {
   });
 });
 
+function withAppUrl(value: string, assertions: () => void): void {
+  const previous = process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NEXT_PUBLIC_APP_URL = value;
+
+  try {
+    assertions();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previous;
+    }
+  }
+}
+
 describe("admin invite storage contract", () => {
   it("uses the auth invite digest and keeps the clear code decryptable", () => {
     const record = createInviteRecord("a".repeat(32));
@@ -194,19 +209,26 @@ describe("admin invite storage contract", () => {
   });
 
   it("prefers the configured public app origin for invite links", () => {
-    const previousOrigin = process.env.NEXT_PUBLIC_APP_URL;
-    process.env.NEXT_PUBLIC_APP_URL = "https://tracker.example.com/";
-
-    try {
+    withAppUrl("https://tracker.example.com/", () => {
       expect(buildInviteLink("75soft-test", "http://localhost:3000")).toBe(
         "https://tracker.example.com/invite?code=75SOFT-TEST",
       );
-    } finally {
-      if (previousOrigin === undefined) {
-        delete process.env.NEXT_PUBLIC_APP_URL;
-      } else {
-        process.env.NEXT_PUBLIC_APP_URL = previousOrigin;
-      }
-    }
+    });
+  });
+
+  it("accepts a configured origin that omits the scheme", () => {
+    withAppUrl("75-soft-seven.vercel.app", () => {
+      expect(buildInviteLink("75soft-test", "http://localhost:3000")).toBe(
+        "https://75-soft-seven.vercel.app/invite?code=75SOFT-TEST",
+      );
+    });
+  });
+
+  it("falls back to the request origin when the configured value is unusable", () => {
+    withAppUrl("not a url", () => {
+      expect(
+        buildInviteLink("75soft-test", "https://75-soft.example.com"),
+      ).toBe("https://75-soft.example.com/invite?code=75SOFT-TEST");
+    });
   });
 });

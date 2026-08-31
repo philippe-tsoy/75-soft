@@ -1,9 +1,14 @@
 import { z } from "zod";
 
+import { HttpError } from "@/lib/http/errors";
+
 const publicEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+  // Deliberately not `.url()`: an origin typed without a scheme must not take
+  // down every route that reads public configuration. `buildInviteLink`
+  // normalizes and discards unusable values.
+  NEXT_PUBLIC_APP_URL: z.string().optional(),
 });
 
 const serverEnvSchema = publicEnvSchema.extend({
@@ -18,8 +23,16 @@ function parseEnv<T extends z.ZodTypeAny>(
   const result = schema.safeParse(values);
 
   if (!result.success) {
-    const fields = result.error.issues.map((issue) => issue.path.join("."));
-    throw new Error(`Invalid environment configuration: ${fields.join(", ")}`);
+    const fields = [
+      ...new Set(result.error.issues.map((issue) => issue.path.join("."))),
+    ];
+    // Variable names are not secrets, and naming them is the only way to
+    // diagnose a deployment whose logs the operator cannot read.
+    throw new HttpError(
+      500,
+      "INTERNAL_ERROR",
+      `Server configuration is incomplete: ${fields.join(", ")}`,
+    );
   }
 
   return result.data;
