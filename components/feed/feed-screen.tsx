@@ -12,16 +12,14 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/feedback";
 import { Button } from "@/components/ui";
 import { DEFAULT_REACTION_PALETTE } from "@/lib/config/75-soft";
 import { queryKeys } from "@/lib/query-keys";
-import type { ContainerDTO, OptionalGoalDTO, PostDTO } from "@/lib/types";
+import type { OptionalGoalDTO, PostDTO } from "@/lib/types";
 
 import { PostCard } from "./post-card";
 import { PostComposer } from "./post-composer";
 
 interface FeedScreenProps {
   optionalGoals: OptionalGoalDTO[];
-  containers?: ContainerDTO[];
   optionalGoalsUnavailable?: boolean;
-  containersUnavailable?: boolean;
 }
 
 interface FeedResponse {
@@ -71,9 +69,7 @@ async function fetchReactionPalette(): Promise<string[]> {
 
 export function FeedScreen({
   optionalGoals,
-  containers = [],
   optionalGoalsUnavailable = false,
-  containersUnavailable = false,
 }: FeedScreenProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -118,7 +114,7 @@ export function FeedScreen({
         </Button>
       </div>
 
-      {optionalGoalsUnavailable || containersUnavailable ? (
+      {optionalGoalsUnavailable ? (
         <div
           className="border-border bg-surface-accent rounded-2xl border p-3 text-sm"
           role="status"
@@ -126,7 +122,7 @@ export function FeedScreen({
           <p className="font-semibold">Some post helpers are unavailable.</p>
           <p className="text-muted mt-1">
             You can still publish required challenges. Refresh later to load
-            optional goals and saved water containers.
+            optional goals.
           </p>
         </div>
       ) : null}
@@ -172,7 +168,6 @@ export function FeedScreen({
         onPosted={invalidateFeed}
         open={composerOpen}
         optionalGoals={optionalGoals}
-        containers={containers}
       />
     </div>
   );

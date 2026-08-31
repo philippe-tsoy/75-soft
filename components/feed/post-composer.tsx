@@ -19,7 +19,6 @@ import {
 import { validateImage } from "@/lib/storage";
 import type {
   AchievementDTO,
-  ContainerDTO,
   OptionalGoalDTO,
   RequiredGoalKey,
 } from "@/lib/types";
@@ -29,7 +28,6 @@ type AmountGoalKey = Exclude<RequiredGoalKey, "diet">;
 interface PostComposerProps {
   open: boolean;
   optionalGoals: OptionalGoalDTO[];
-  containers?: ContainerDTO[];
   allowYesterday?: boolean;
   onClose: () => void;
   onPosted: () => void;
@@ -88,7 +86,6 @@ function photoErrorMessage(error: "unsupported_type" | "too_large" | "empty") {
 export function PostComposer({
   open,
   optionalGoals,
-  containers = [],
   allowYesterday = true,
   onClose,
   onPosted,
@@ -410,29 +407,6 @@ export function PostComposer({
                                 variant="secondary"
                               >
                                 Use {quickAmount}
-                              </Button>
-                            ))}
-                          </div>
-                        ) : null}
-                        {key === "water" && containers.length > 0 ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {containers.map((container) => (
-                              <Button
-                                key={container.id}
-                                onClick={() => {
-                                  setAmounts((current) => ({
-                                    ...current,
-                                    water: String(container.volumeMl),
-                                  }));
-                                  setUnits((current) => ({
-                                    ...current,
-                                    water: "ml",
-                                  }));
-                                }}
-                                type="button"
-                                variant="secondary"
-                              >
-                                Use {container.label} ({container.volumeMl} ml)
                               </Button>
                             ))}
                           </div>

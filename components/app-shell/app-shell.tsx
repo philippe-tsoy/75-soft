@@ -9,9 +9,9 @@ import type { ProfileDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { href: "/board", label: "Board" },
   { href: "/today", label: "Today" },
   { href: "/feed", label: "Feed" },
+  { href: "/board", label: "Board" },
 ] as const;
 
 interface AppShellProps {

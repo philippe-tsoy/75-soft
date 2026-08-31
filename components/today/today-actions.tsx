@@ -11,24 +11,7 @@ import {
   fetchOptionalGoals,
 } from "@/components/optional-goals";
 import { Button, Card, CardHeader, CardTitle } from "@/components/ui";
-import type { ContainerDTO } from "@/lib/types";
 import { queryKeys } from "@/lib/query-keys";
-
-async function fetchContainers(): Promise<ContainerDTO[]> {
-  const response = await fetch("/api/containers");
-  const payload = (await response.json().catch(() => null)) as {
-    data?: ContainerDTO[];
-    error?: { message?: string };
-  } | null;
-
-  if (!response.ok) {
-    throw new Error(
-      payload?.error?.message ?? "Saved water containers are unavailable.",
-    );
-  }
-
-  return payload?.data ?? [];
-}
 
 export function TodayActions({
   localDate,
@@ -45,10 +28,6 @@ export function TodayActions({
   const optionalGoalsQuery = useQuery({
     queryKey: queryKeys.optionalGoals("me"),
     queryFn: fetchOptionalGoals,
-  });
-  const containersQuery = useQuery({
-    queryKey: queryKeys.containers("me"),
-    queryFn: fetchContainers,
   });
 
   function handlePosted() {
@@ -92,7 +71,6 @@ export function TodayActions({
         onPosted={handlePosted}
         open={composerOpen}
         optionalGoals={optionalGoalsQuery.data ?? []}
-        containers={containersQuery.data ?? []}
         allowYesterday={allowYesterday}
       />
     </>
