@@ -132,4 +132,16 @@ describe("W8 migration contracts", () => {
       "revoke update, delete on public.optional_goal_logs from authenticated",
     );
   });
+
+  it("qualifies admin invite rotation references", () => {
+    const rotation = migration("0010_fix_admin_rotate_invite_ambiguity.sql");
+
+    expectSql(
+      rotation,
+      "create or replace function public.admin_rotate_invite",
+    );
+    expectSql(rotation, "where invite.cohort_id = v_cohort_id");
+    expectSql(rotation, "returning * into v_new_invite");
+    expect(rotation).not.toMatch(/invite_codes\.cohort_id\s*=\s*cohort_id/iu);
+  });
 });

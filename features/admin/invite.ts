@@ -120,7 +120,34 @@ export function createInviteRecord(secret = getInviteSecret()): InviteRecord {
   };
 }
 
+function normalizeOrigin(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(
+      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+    );
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function getConfiguredAppOrigin(): string | null {
+  return (
+    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
+    normalizeOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
+    normalizeOrigin(process.env.VERCEL_URL)
+  );
+}
+
 export function buildInviteLink(code: string, origin?: string): string {
-  const base = origin?.replace(/\/+$/, "") ?? "";
+  const base = getConfiguredAppOrigin() ?? normalizeOrigin(origin) ?? "";
   return `${base}/invite?code=${encodeURIComponent(normalizeInviteCode(code))}`;
 }

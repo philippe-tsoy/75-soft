@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HttpError } from "@/lib/http";
-import { createInviteRecord, decryptInviteCode } from "@/features/admin/invite";
+import {
+  buildInviteLink,
+  createInviteRecord,
+  decryptInviteCode,
+} from "@/features/admin/invite";
 import { INVALIDATED_GOAL_STATES } from "@/features/admin/types";
 import { hashInviteCode } from "@/features/auth/invite-intent";
 import { requireAdmin } from "@/lib/auth/access";
@@ -187,5 +191,22 @@ describe("admin invite storage contract", () => {
       record.code,
     );
     expect(record.codeCiphertext).not.toContain(record.code);
+  });
+
+  it("prefers the configured public app origin for invite links", () => {
+    const previousOrigin = process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://tracker.example.com/";
+
+    try {
+      expect(buildInviteLink("75soft-test", "http://localhost:3000")).toBe(
+        "https://tracker.example.com/invite?code=75SOFT-TEST",
+      );
+    } finally {
+      if (previousOrigin === undefined) {
+        delete process.env.NEXT_PUBLIC_APP_URL;
+      } else {
+        process.env.NEXT_PUBLIC_APP_URL = previousOrigin;
+      }
+    }
   });
 });

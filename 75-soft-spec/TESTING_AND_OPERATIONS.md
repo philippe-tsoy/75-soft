@@ -186,6 +186,7 @@ Before production:
 - apply migrations to a disposable Supabase project;
 - run seed and RLS tests against that project;
 - configure production Auth site/redirect URLs;
+- set `NEXT_PUBLIC_APP_URL` to the public deployment origin used in invite links;
 - configure only public Supabase URL/key in browser environment;
 - store service-role key in server-only deployment secrets;
 - create the private `post-photos` bucket and policies;

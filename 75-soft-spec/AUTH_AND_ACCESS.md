@@ -30,7 +30,7 @@ created → active → rotated
 - A successful signup consumes no one-time token; it creates one membership.
 - Rotation invalidates the old code immediately and creates a new code.
 - The raw code must not be written to application logs or analytics.
-- An invite link opens `/invite?code=<code>`. After validation, replace the browser URL so the code is not left in navigation history where practical.
+- An invite link opens `/invite?code=<code>` from the configured public app origin. After validation, replace the browser URL so the code is not left in navigation history where practical.
 - An invalid or rotated code keeps the user on Invite and does not create an app account.
 
 The invite code is an access credential for a private group, not a password. Store a cryptographic hash for validation where possible; show the clear value only when an admin creates or rotates it.

@@ -98,7 +98,15 @@ export function InviteForm({
         intentExpiresAt?: string;
       }>(response);
 
-      if (!response.ok || !body.data?.valid) {
+      if (!response.ok) {
+        setMessage(
+          getErrorMessage(body) ??
+            "Unable to validate the invite right now. Try again.",
+        );
+        return;
+      }
+
+      if (!body.data?.valid) {
         setMessage(
           "That invite code is not valid. Ask an admin for the current code.",
         );

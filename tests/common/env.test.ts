@@ -5,6 +5,7 @@ import { getPublicEnv, getServerEnv } from "@/lib/config/env";
 const keys = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "NEXT_PUBLIC_APP_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "INVITE_INTENT_SECRET",
 ] as const;
@@ -25,6 +26,7 @@ afterEach(() => {
 function setValidEnv() {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "public-anon-key";
+  process.env.NEXT_PUBLIC_APP_URL = "https://tracker.example.com";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
   process.env.INVITE_INTENT_SECRET = "x".repeat(32);
 }
@@ -36,6 +38,7 @@ describe("environment configuration", () => {
     expect(getPublicEnv()).toEqual({
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "public-anon-key",
+      NEXT_PUBLIC_APP_URL: "https://tracker.example.com",
     });
   });
 

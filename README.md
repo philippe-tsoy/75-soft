@@ -8,11 +8,19 @@ in [`75-soft-spec/`](./75-soft-spec/).
 1. Install Node.js 20+ and the dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local`.
 3. Add the Supabase URL, publishable/anon key, service-role key, and a random
-   invite-intent secret.
+   invite-intent secret. Set `NEXT_PUBLIC_APP_URL` to the public app origin;
+   do not share invite links generated from `localhost`.
 4. Apply the numbered migrations in `database/migrations/` in order
-   (`0001_core.sql` through `0009_remove_default_water_containers.sql`) to the Supabase
+   (`0001_core.sql` through `0010_fix_admin_rotate_invite_ambiguity.sql`) to the Supabase
    project.
 5. Start the app with `npm run dev`.
+
+For Vercel, add all five variables to the deployment environment and redeploy
+after changing them. `SUPABASE_SERVICE_ROLE_KEY` is required by login, invite
+validation, and signup; it must belong to the same Supabase project as the
+public URL/key. Set `NEXT_PUBLIC_APP_URL` to
+`https://75-soft-seven.vercel.app` (or your custom production domain) so
+copied invite links do not point to localhost.
 
 The service-role key is server-only. It must never be imported by a client
 component or exposed as a `NEXT_PUBLIC_` variable.
