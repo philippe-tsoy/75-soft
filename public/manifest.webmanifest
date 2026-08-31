@@ -1,0 +1,9 @@
+{
+  "name": "75 Soft",
+  "short_name": "75 Soft",
+  "start_url": "/today",
+  "display": "standalone",
+  "background_color": "#f4f8f2",
+  "theme_color": "#2f6b4f",
+  "description": "A private group tracker for the 75 Soft challenge."
+}

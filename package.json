@@ -1,0 +1,50 @@
+{
+  "name": "75-soft",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:types": "supabase gen types typescript --linked > lib/supabase/database.types.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.5",
+    "@supabase/supabase-js": "^2.50.0",
+    "@tanstack/react-query": "^5.80.7",
+    "clsx": "^2.1.1",
+    "next": "^16.3.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.57.0",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.3.0",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@tailwindcss/postcss": "^4.1.8",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.15.29",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "^16.3.3",
+    "eslint-config-prettier": "^10.1.5",
+    "jsdom": "^26.1.0",
+    "postcss": "^8.5.3",
+    "prettier": "^3.5.3",
+    "prettier-plugin-tailwindcss": "^0.6.12",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
