@@ -169,6 +169,10 @@ export function PostComposer({
       setError("Select at least one goal.");
       return;
     }
+    if (!photo) {
+      setError("A photo is required to post an update.");
+      return;
+    }
     if (photoError) {
       return;
     }
@@ -242,9 +246,7 @@ export function PostComposer({
       formData.set("goals", JSON.stringify(goals));
       formData.set("note", note);
       formData.set("clientOperationId", nextOperationId);
-      if (photo) {
-        formData.set("photo", photo);
-      }
+      formData.set("photo", photo);
 
       setSubmitting(true);
       const response = await fetch("/api/posts", {
@@ -513,14 +515,16 @@ export function PostComposer({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="post-photo">Photo (optional)</Label>
+            <Label htmlFor="post-photo">Photo</Label>
             <input
               accept={POST_PHOTO_MIME_TYPES.join(",")}
+              aria-required="true"
               className="border-border bg-card text-foreground min-h-11 w-full rounded-xl border p-2 text-sm"
               id="post-photo"
               onChange={(event) =>
                 handlePhoto(event.currentTarget.files?.[0] ?? null)
               }
+              required
               type="file"
             />
             {photo ? (

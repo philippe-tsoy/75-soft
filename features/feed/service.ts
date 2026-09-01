@@ -527,7 +527,7 @@ export async function createPost(input: {
   localDate: string;
   goals: readonly PostGoalInput[];
   note: string | null;
-  photo: File | null;
+  photo: File;
   clientOperationId: string;
   scoring?: FeedScoringAdapter;
 }): Promise<CreatePostResult> {
@@ -616,33 +616,31 @@ export async function createPost(input: {
 
   let photoPath: string | null = null;
   try {
-    if (input.photo) {
-      const extension = getPhotoExtension(input.photo);
-      photoPath = buildPostPhotoPath(
-        input.authorId,
-        post.id,
-        crypto.randomUUID(),
-        extension,
-      );
+    const extension = getPhotoExtension(input.photo);
+    photoPath = buildPostPhotoPath(
+      input.authorId,
+      post.id,
+      crypto.randomUUID(),
+      extension,
+    );
 
-      const { error: pathError } = await input.client
-        .from("posts")
-        .update({ photo_path: photoPath } satisfies FeedPostUpdate)
-        .eq("id", post.id)
-        .eq("status", "pending");
-      if (pathError) {
-        throw pathError;
-      }
+    const { error: pathError } = await input.client
+      .from("posts")
+      .update({ photo_path: photoPath } satisfies FeedPostUpdate)
+      .eq("id", post.id)
+      .eq("status", "pending");
+    if (pathError) {
+      throw pathError;
+    }
 
-      const { error: uploadError } = await input.client.storage
-        .from("post-photos")
-        .upload(photoPath, input.photo, {
-          contentType: input.photo.type,
-          upsert: false,
-        });
-      if (uploadError) {
-        throw uploadError;
-      }
+    const { error: uploadError } = await input.client.storage
+      .from("post-photos")
+      .upload(photoPath, input.photo, {
+        contentType: input.photo.type,
+        upsert: false,
+      });
+    if (uploadError) {
+      throw uploadError;
     }
 
     const { data: publishedData, error: publishError } = await input.client

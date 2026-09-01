@@ -27,7 +27,7 @@ export interface ParsedPostForm {
   localDate: string;
   goals: PostGoalInput[];
   note: string | null;
-  photo: File | null;
+  photo: File;
   clientOperationId: string;
 }
 
@@ -111,10 +111,10 @@ function parseNote(formData: FormData): string | null {
   return parsed.data ?? null;
 }
 
-function parsePhoto(formData: FormData): File | null {
+function parsePhoto(formData: FormData): File {
   const value = formData.get("photo");
   if (value === null) {
-    return null;
+    validationError("A photo is required to post an update");
   }
 
   if (typeof value === "string") {
