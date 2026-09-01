@@ -9,7 +9,7 @@ export interface FeedPostRow {
   cohort_id: string;
   local_date: string;
   note: string | null;
-  photo_path: string | null;
+  photo_path: string;
   status: PostStatus;
   client_operation_id: string;
   created_at: string;
@@ -24,7 +24,7 @@ export interface FeedPostInsert {
   cohort_id: string;
   local_date: string;
   note?: string | null;
-  photo_path?: string | null;
+  photo_path: string;
   status?: PostStatus;
   client_operation_id: string;
   created_at?: string;
@@ -35,7 +35,6 @@ export interface FeedPostInsert {
 
 export interface FeedPostUpdate {
   note?: string | null;
-  photo_path?: string | null;
   status?: PostStatus;
   published_at?: string | null;
   deleted_at?: string | null;

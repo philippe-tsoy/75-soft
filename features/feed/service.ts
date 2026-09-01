@@ -554,13 +554,20 @@ export async function createPost(input: {
     input.authorId,
     input.goals,
   );
+  const postId = crypto.randomUUID();
+  const photoPath = buildPostPhotoPath(
+    input.authorId,
+    postId,
+    crypto.randomUUID(),
+    getPhotoExtension(input.photo),
+  );
   const postInsert: FeedPostInsert = {
-    id: crypto.randomUUID(),
+    id: postId,
     author_id: input.authorId,
     cohort_id: input.cohortId,
     local_date: input.localDate,
     note: input.note,
-    photo_path: null,
+    photo_path: photoPath,
     status: "pending",
     client_operation_id: input.clientOperationId,
   };
@@ -614,25 +621,7 @@ export async function createPost(input: {
     throwDatabaseError("Unable to save the post goals", entryError);
   }
 
-  let photoPath: string | null = null;
   try {
-    const extension = getPhotoExtension(input.photo);
-    photoPath = buildPostPhotoPath(
-      input.authorId,
-      post.id,
-      crypto.randomUUID(),
-      extension,
-    );
-
-    const { error: pathError } = await input.client
-      .from("posts")
-      .update({ photo_path: photoPath } satisfies FeedPostUpdate)
-      .eq("id", post.id)
-      .eq("status", "pending");
-    if (pathError) {
-      throw pathError;
-    }
-
     const { error: uploadError } = await input.client.storage
       .from("post-photos")
       .upload(photoPath, input.photo, {
