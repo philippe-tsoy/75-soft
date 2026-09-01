@@ -4,6 +4,7 @@ import { OptionalGoalsPanel } from "@/components/optional-goals";
 import { AchievementPanel } from "@/components/achievements";
 import { ReactionPaletteEditor } from "@/components/profile/reaction-palette-editor";
 import { Card, CardHeader, CardTitle } from "@/components/ui";
+import { MyTeamPanel } from "@/components/teams/my-team-panel";
 import { ChangePasswordForm, LogoutButton } from "@/features/auth/forms";
 import { ProfileEditor } from "@/features/profiles/profile-editor";
 import { getCurrentProfile } from "@/features/profiles/service";
@@ -69,6 +70,7 @@ export default async function MePage() {
         </div>
       </Card>
       <ReactionPaletteEditor />
+      <MyTeamPanel userId={profile.id} />
       <OptionalGoalsPanel showArchived />
       <AchievementPanel />
       <p className="text-muted text-center text-xs">Version {APP_VERSION}</p>

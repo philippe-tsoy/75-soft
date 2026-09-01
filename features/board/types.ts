@@ -26,6 +26,7 @@ export interface BoardRpcRow {
 export interface PersonReadModel {
   profile: ProfileDTO;
   goalsAchievedToday: number;
+  individualPct: number;
   calendar: CalendarCellDTO[];
   currentDay: DayRollupDTO;
   achievements: import("@/lib/types").AchievementDTO[];

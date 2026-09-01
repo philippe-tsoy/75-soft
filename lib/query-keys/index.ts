@@ -14,6 +14,9 @@ export const queryKeys = {
   containers: (userId: string) => ["containers", userId] as const,
   optionalGoals: (userId: string) => ["optional-goals", userId] as const,
   achievements: (userId: string) => ["achievements", userId] as const,
+  teams: () => ["teams"] as const,
+  team: (teamId: string) => ["team", teamId] as const,
+  myTeam: (userId: string) => ["my-team", userId] as const,
   adminMembers: () => ["admin", "members"] as const,
   adminInvite: () => ["admin", "invite"] as const,
 };

@@ -132,6 +132,37 @@ export interface BoardEntryDTO {
   scoreDate: string;
 }
 
+export interface TeamBoardEntryDTO {
+  rank: number;
+  teamId: string;
+  name: string;
+  memberCount: number;
+  pct: number;
+}
+
+export interface TeamRosterMemberDTO {
+  userId: string;
+  profile: ProfileDTO;
+  individualPct: number;
+  goalsAchievedToday: number;
+}
+
+export interface TeamSummaryDTO {
+  teamId: string;
+  name: string;
+  createdBy: string;
+  memberCount: number;
+  pct: number;
+  roster: TeamRosterMemberDTO[];
+}
+
+export interface MyTeamDTO {
+  teamId: string;
+  name: string;
+  individualPct: number;
+  teamPct: number;
+}
+
 export interface SessionDTO {
   authenticated: boolean;
   member: boolean;

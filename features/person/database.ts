@@ -34,6 +34,7 @@ import {
   asDayTrackingClient,
   createDayTrackingReadService,
 } from "@/features/day-tracking";
+import { getMemberPercentage } from "@/features/teams/database";
 import type { PersonSummaryDTO } from "./types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -268,6 +269,9 @@ function normalizePersonPayload(
     goalsAchievedToday:
       numberAt(row, "goalsAchievedToday", "goals_achieved_today") ??
       currentDay.metCount,
+    // Percentage completion is not part of get_person_summary; getPersonSummary
+    // fetches and overwrites this from get_member_percentage separately.
+    individualPct: 0,
     calendar: normalizeCalendar(valueAt(row, "calendar")),
     currentDay,
     achievements,
@@ -394,6 +398,7 @@ async function fallbackPersonSummary(
   const summary: PersonSummaryDTO = {
     profile,
     goalsAchievedToday: score.goalsAchievedToday,
+    individualPct: 0,
     calendar,
     currentDay,
     achievements: [],
@@ -412,13 +417,11 @@ async function fallbackPersonSummary(
   };
 }
 
-export async function getPersonSummary(
+async function getPersonSummaryUnpatched(
   viewerId: string,
   subjectId: string,
-  client?: SupabaseClient<Database>,
+  supabase: SupabaseClient<Database>,
 ): Promise<PersonSummaryDTO | null> {
-  const supabase = client ?? (await createSupabaseServerClient());
-
   try {
     const data = await readRpc(supabase, "get_person_summary", {
       viewer_id: viewerId,
@@ -447,6 +450,34 @@ export async function getPersonSummary(
     }
 
     throw error;
+  }
+}
+
+export async function getPersonSummary(
+  viewerId: string,
+  subjectId: string,
+  client?: SupabaseClient<Database>,
+): Promise<PersonSummaryDTO | null> {
+  const supabase = client ?? (await createSupabaseServerClient());
+  const summary = await getPersonSummaryUnpatched(
+    viewerId,
+    subjectId,
+    supabase,
+  );
+  if (!summary) {
+    return null;
+  }
+
+  try {
+    const individualPct = await getMemberPercentage(
+      viewerId,
+      subjectId,
+      supabase,
+    );
+    return { ...summary, individualPct };
+  } catch {
+    // Percentage completion must not make the rest of Person unavailable.
+    return summary;
   }
 }
 

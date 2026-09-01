@@ -19,6 +19,9 @@ export function PersonHeader({ person }: PersonHeaderProps) {
         <p className="text-muted mt-1 text-sm">
           {person.goalsAchievedToday} of 4 required challenges achieved today
         </p>
+        <p className="text-muted mt-1 text-sm">
+          {person.individualPct}% of the challenge complete so far
+        </p>
       </div>
       {person.canEdit ? (
         <Link

@@ -153,6 +153,34 @@ export function rankDailyBoard(
   });
 }
 
+export interface ScoreRankInput {
+  id: string;
+  score: number;
+}
+
+export interface ScoreRankedEntry extends ScoreRankInput {
+  rank: number;
+}
+
+// Same competition-ranking algorithm as rankDailyBoard (1, 1, 3), generalized
+// to any single numeric score so team-percentage ranking does not duplicate
+// the tie logic.
+export function rankByScore(
+  entries: readonly ScoreRankInput[],
+): ScoreRankedEntry[] {
+  const sorted = [...entries].sort((left, right) => right.score - left.score);
+
+  return sorted.map((entry, index) => {
+    const previous = sorted[index - 1];
+    const rank =
+      index > 0 && previous.score === entry.score
+        ? sorted.findIndex((candidate) => candidate.score === entry.score) + 1
+        : index + 1;
+
+    return { ...entry, rank };
+  });
+}
+
 export function requiredGoalMet(
   key: RequiredGoalKey,
   totals: GoalTotals,
