@@ -233,6 +233,30 @@ function CustomWaterAmountForm({
   );
 }
 
+function remainingToTarget(progress: GoalProgressDTO): number {
+  return Math.max(0, (progress.target ?? 0) - (progress.amount ?? 0));
+}
+
+function MarkDoneButton({
+  pending,
+  progress,
+  onMarkDone,
+}: {
+  pending: boolean;
+  progress: GoalProgressDTO;
+  onMarkDone: () => void;
+}) {
+  return (
+    <Button
+      aria-pressed={progress.met}
+      disabled={pending || progress.met}
+      onClick={onMarkDone}
+    >
+      {progress.met ? "Done ✓" : "Mark done"}
+    </Button>
+  );
+}
+
 function ProgressControl({
   title,
   progress,
@@ -252,6 +276,11 @@ function ProgressControl({
 }) {
   return (
     <GoalControl pending={pending} progress={progress} title={title}>
+      <MarkDoneButton
+        onMarkDone={() => onAdd(remainingToTarget(progress))}
+        pending={pending}
+        progress={progress}
+      />
       {quickAmounts.map((amount) => (
         <Button
           disabled={pending}
@@ -578,6 +607,17 @@ export function DayTracker({
         progress={day.goals.water}
         title="Water"
       >
+        <MarkDoneButton
+          onMarkDone={() =>
+            void addAmount(
+              "water",
+              remainingToTarget(day.goals.water),
+              "ml",
+            )
+          }
+          pending={dayMutationPending || !day.editable}
+          progress={day.goals.water}
+        />
         <Button
           disabled={dayMutationPending}
           onClick={() => setContainersOpen(true)}
@@ -671,8 +711,9 @@ export function DayTracker({
       </Sheet>
 
       <p className="text-muted px-1 text-xs">
-        Workout, water, and reading add to the day. Diet uses the latest toggle
-        state; every action can be safely retried.
+        Workout, water, and reading add to the day; Mark done tops up whatever
+        is left to reach the target. Diet uses the latest toggle state; every
+        action can be safely retried.
       </p>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}
