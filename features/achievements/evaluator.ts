@@ -1,3 +1,7 @@
+// Not wired into production: the live evaluation path is the
+// `evaluate_achievements` Postgres RPC (database/functions/achievement_evaluator.sql),
+// called from features/achievements/database.ts. Keep the two rule sets in
+// sync manually until one is deleted or this one is actually adopted.
 import { getYesterday } from "@/lib/dates";
 import { WATER_TARGET_ML } from "@/lib/config/75-soft";
 

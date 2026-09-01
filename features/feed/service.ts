@@ -675,7 +675,8 @@ export async function createPost(input: {
       localDate: post.local_date,
       hasPhoto: Boolean(post.photo_path),
     });
-  } catch {
+  } catch (error) {
+    console.error("Achievement evaluation failed after post published", error);
     newAchievements = [];
   }
 

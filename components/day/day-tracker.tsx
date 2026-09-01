@@ -17,13 +17,14 @@ import {
   applyOptimisticAmount,
   applyOptimisticDiet,
 } from "@/features/day-tracking/optimistic";
+import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
 import type {
   AchievementDTO,
   ContainerDTO,
   DayRollupDTO,
   GoalProgressDTO,
 } from "@/lib/types";
-import { queryKeys } from "@/lib/query-keys";
+import { normalizeWaterAmount } from "@/lib/validation";
 
 import { ContainerManager } from "./container-manager";
 import { GoalControl } from "./goal-control";
@@ -162,12 +163,14 @@ function CustomWaterAmountForm({
   function submitCustomAmount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amount = Number(customAmount);
-    const normalized = unit === "l" ? amount * 1_000 : amount;
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0 ||
-      !Number.isSafeInteger(normalized)
-    ) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setValidationError("Enter a positive whole number.");
+      return;
+    }
+
+    try {
+      normalizeWaterAmount(amount, unit);
+    } catch {
       setValidationError(
         unit === "l"
           ? "Use a positive amount that converts to whole milliliters."
@@ -290,16 +293,20 @@ export function DayTracker({
   const dayMutationPending = Object.values(pending).some(Boolean);
 
   function refreshRelatedData() {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.day(userId, day.localDate),
-    });
-    void queryClient.invalidateQueries({ queryKey: ["group-strip"] });
-    void queryClient.invalidateQueries({ queryKey: ["board"] });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.person(userId) });
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.achievements(userId),
-    });
+    invalidateDayTracking(queryClient, userId, day.localDate);
     router.refresh();
+  }
+
+  function toOptimisticAmount(
+    goal: AmountGoal,
+    amount: number,
+    unit: AmountUnit,
+  ): number {
+    if (goal === "water" && (unit === "ml" || unit === "l")) {
+      return normalizeWaterAmount(amount, unit);
+    }
+
+    return amount;
   }
 
   function setGoalPending(goal: string, value: boolean) {
@@ -329,7 +336,14 @@ export function DayTracker({
       operationId: operation.operationId,
       unit,
     };
-    setDay(applyOptimisticAmount(day, goal, amount, today));
+    setDay(
+      applyOptimisticAmount(
+        day,
+        goal,
+        toOptimisticAmount(goal, amount, unit),
+        today,
+      ),
+    );
     setGoalPending(goal, true);
     setError(null);
     setSessionExpired(false);

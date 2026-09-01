@@ -171,9 +171,16 @@ export const postGoalInputSchema = z
 
 export function normalizeWaterAmount(amount: number, unit: "ml" | "l"): number {
   const normalized = unit === "l" ? amount * 1_000 : amount;
-  if (!Number.isSafeInteger(normalized) || normalized <= 0) {
+  const rounded = Math.round(normalized);
+  // Liter inputs go through float multiplication (1.005 * 1000 === 1004.9999999999999),
+  // so tolerate float noise but still reject genuinely fractional ml amounts.
+  if (
+    Math.abs(normalized - rounded) > 1e-6 ||
+    !Number.isSafeInteger(rounded) ||
+    rounded <= 0
+  ) {
     throw new Error("Water amount must resolve to a positive whole ml value");
   }
 
-  return normalized;
+  return rounded;
 }

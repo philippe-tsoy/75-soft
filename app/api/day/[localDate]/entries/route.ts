@@ -53,7 +53,10 @@ export async function POST(request: Request, { params }: DayRouteContext) {
     const newAchievements = await evaluateDayActionAchievements({
       userId: access.user.id,
       localDate,
-    }).catch(() => []);
+    }).catch((error: unknown) => {
+      console.error("Achievement evaluation failed after day entry", error);
+      return [];
+    });
 
     return ok(
       {

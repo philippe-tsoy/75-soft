@@ -148,10 +148,3 @@ export function formatInstantForViewer(
     timeZone: viewerTimezone,
   }).format(value);
 }
-
-export function isTodayOrYesterday(
-  localDate: ISODate,
-  memberLocalDate: ISODate,
-): boolean {
-  return isEditableDate(localDate, memberLocalDate, "0000-01-01");
-}

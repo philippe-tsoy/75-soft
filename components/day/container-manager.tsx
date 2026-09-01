@@ -1,6 +1,5 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import {
   useState,
   type Dispatch,
@@ -34,7 +33,6 @@ function ContainerRow({
   onChange: Dispatch<SetStateAction<ContainerDTO[]>>;
   onError: (message: string) => void;
 }) {
-  const queryClient = useQueryClient();
   const [label, setLabel] = useState(container.label);
   const [volumeMl, setVolumeMl] = useState(String(container.volumeMl));
   const [pending, setPending] = useState(false);
@@ -75,7 +73,6 @@ function ContainerRow({
       );
       setLabel(updated.label);
       setVolumeMl(String(updated.volumeMl));
-      void queryClient.invalidateQueries({ queryKey: ["containers"] });
     } catch (error) {
       onChange((current) =>
         current.map((item) => (item.id === previous.id ? previous : item)),
@@ -108,7 +105,6 @@ function ContainerRow({
           }
         },
       );
-      void queryClient.invalidateQueries({ queryKey: ["containers"] });
     } catch (error) {
       onChange((current) =>
         [...current, previous].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -176,7 +172,6 @@ export function ContainerManager({
   onContainersChange,
   onError,
 }: ContainerManagerProps) {
-  const queryClient = useQueryClient();
   const [label, setLabel] = useState("");
   const [volumeMl, setVolumeMl] = useState("");
   const [pending, setPending] = useState(false);
@@ -218,7 +213,6 @@ export function ContainerManager({
       onContainersChange((current) =>
         current.map((item) => (item.id === optimisticId ? created : item)),
       );
-      void queryClient.invalidateQueries({ queryKey: ["containers"] });
       setLabel("");
     } catch (error) {
       onContainersChange((current) =>

@@ -305,6 +305,10 @@ async function readPublishedPersonPosts(
     }
 
     const feedClient = client as unknown as FeedClient;
+    // Each row below costs several follow-up queries (getVisiblePost fans out
+    // into entries/reactions/comments/author lookups), so the cap here bounds
+    // per-request query fan-out. Matches the main feed's page size; a real fix
+    // needs batched (IN-query) hydration shared with listFeed's postDTO calls.
     const { data, error } = await feedClient
       .from("posts")
       .select(POST_COLUMNS)
@@ -313,7 +317,7 @@ async function readPublishedPersonPosts(
       .eq("status", "published")
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
-      .limit(50);
+      .limit(20);
 
     if (error) {
       return fallback;

@@ -69,9 +69,15 @@ export function OptionalGoalsPanel({
     });
   };
 
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+
   const archiveMutation = useMutation({
     mutationFn: archiveOptionalGoal,
-    onSuccess: updateCache,
+    onSuccess: (goal) => {
+      setArchiveError(null);
+      updateCache(goal);
+    },
+    onError: (error: unknown) => setArchiveError(errorMessage(error)),
   });
 
   const logMutation = useMutation<
@@ -226,6 +232,14 @@ export function OptionalGoalsPanel({
           message={streakToast.message}
           onDismiss={dismissStreakToast}
           tone="success"
+        />
+      ) : null}
+
+      {archiveError ? (
+        <Toast
+          message={archiveError}
+          onDismiss={() => setArchiveError(null)}
+          tone="error"
         />
       ) : null}
     </>

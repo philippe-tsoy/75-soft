@@ -41,6 +41,12 @@ function requireContainer(row: WaterContainerRow | null): WaterContainerRow {
   return row;
 }
 
+function isSortOrderConflict(error: DayQueryError | null): boolean {
+  return error?.code === "23505";
+}
+
+const MAX_SORT_ORDER_ATTEMPTS = 5;
+
 export function createContainerMutationService(
   db: DayTrackingClient,
 ): ContainerMutationService {
@@ -59,25 +65,41 @@ export function createContainerMutationService(
     },
 
     async createContainer(userId, input: ContainerCreateInput) {
-      const existing = await this.listContainers(userId);
-      const sortOrder =
-        existing.reduce(
-          (highest, container) => Math.max(highest, container.sortOrder),
-          -1,
-        ) + 1;
-      const result = await db
-        .from("water_containers")
-        .insert({
-          owner_id: userId,
-          label: input.label.trim(),
-          volume_ml: input.volumeMl,
-          sort_order: sortOrder,
-        })
-        .select(CONTAINER_COLUMNS)
-        .single();
+      // Two concurrent creates can both read the same max(sort_order) before
+      // either insert commits; the unique index below turns that into a
+      // conflict we retry with a freshly recomputed value instead of a
+      // silent duplicate ordering.
+      for (let attempt = 0; attempt < MAX_SORT_ORDER_ATTEMPTS; attempt += 1) {
+        const existing = await this.listContainers(userId);
+        const sortOrder =
+          existing.reduce(
+            (highest, container) => Math.max(highest, container.sortOrder),
+            -1,
+          ) + 1;
+        const result = await db
+          .from("water_containers")
+          .insert({
+            owner_id: userId,
+            label: input.label.trim(),
+            volume_ml: input.volumeMl,
+            sort_order: sortOrder,
+          })
+          .select(CONTAINER_COLUMNS)
+          .single();
 
-      throwContainerQueryError(result.error);
-      return mapContainer(requireContainer(result.data));
+        if (isSortOrderConflict(result.error)) {
+          continue;
+        }
+
+        throwContainerQueryError(result.error);
+        return mapContainer(requireContainer(result.data));
+      }
+
+      throw new HttpError(
+        409,
+        "CONFLICT",
+        "Unable to place the new container after repeated conflicts",
+      );
     },
 
     async updateContainer(userId, containerId, input: ContainerUpdateInput) {

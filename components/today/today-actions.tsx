@@ -39,7 +39,7 @@ export function TodayActions({
     });
     void queryClient.invalidateQueries({ queryKey: queryKeys.person(userId) });
     void queryClient.invalidateQueries({
-      queryKey: queryKeys.achievements(userId),
+      queryKey: queryKeys.achievements("me"),
     });
     router.refresh();
   }

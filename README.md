@@ -11,8 +11,8 @@ in [`75-soft-spec/`](./75-soft-spec/).
    invite-intent secret. Set `NEXT_PUBLIC_APP_URL` to the public app origin;
    do not share invite links generated from `localhost`.
 4. Apply the numbered migrations in `database/migrations/` in order
-   (`0001_core.sql` through `0010_fix_admin_rotate_invite_ambiguity.sql`) to the Supabase
-   project.
+   (`0001_core.sql` through `0011_water_container_sort_order_unique.sql`) to
+   the Supabase project.
 5. Start the app with `npm run dev`.
 
 For Vercel, add all five variables to the deployment environment and redeploy

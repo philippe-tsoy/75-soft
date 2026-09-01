@@ -1,3 +1,6 @@
+// Covers features/achievements/evaluator.ts, which is NOT the production
+// evaluation path (see the comment at the top of that file) — passing here
+// does not guarantee the live `evaluate_achievements` SQL RPC behaves the same.
 import { describe, expect, it } from "vitest";
 
 import {
