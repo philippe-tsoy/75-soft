@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui";
 import { ChangePasswordForm, LogoutButton } from "@/features/auth/forms";
 import { ProfileEditor } from "@/features/profiles/profile-editor";
 import { getCurrentProfile } from "@/features/profiles/service";
+import { APP_VERSION } from "@/lib/config/version";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,7 @@ export default async function MePage() {
       <ReactionPaletteEditor />
       <OptionalGoalsPanel showArchived />
       <AchievementPanel />
+      <p className="text-muted text-center text-xs">Version {APP_VERSION}</p>
     </div>
   );
 }
