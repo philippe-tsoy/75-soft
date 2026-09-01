@@ -104,6 +104,13 @@ export interface CommentDTO {
   canDelete: boolean;
 }
 
+export interface PostRequiredSnapshotDTO {
+  workout: { amount: number; met: boolean };
+  water: { amount: number; met: boolean };
+  reading: { amount: number; met: boolean };
+  diet: { met: boolean };
+}
+
 export interface PostDTO {
   id: string;
   author: ProfileDTO;
@@ -112,6 +119,8 @@ export interface PostDTO {
   goals: PostGoalDTO[];
   note: string | null;
   photoUrl: string | null;
+  requiredSnapshot: PostRequiredSnapshotDTO;
+  teamId: string | null;
   reactions: ReactionSummaryDTO[];
   comments: CommentDTO[];
   canDelete: boolean;

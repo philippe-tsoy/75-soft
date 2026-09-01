@@ -1,48 +1,32 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { AchievementToast } from "@/components/achievements";
 import { Sheet } from "@/components/sheets/sheet";
 import { Button, Input, Label } from "@/components/ui";
 import {
-  COHORT_START_DATE,
   MAX_NOTE_CHARACTERS,
   MAX_POST_PHOTO_BYTES,
   POST_PHOTO_MIME_TYPES,
-  READING_TARGET_PAGES,
   REQUIRED_GOALS,
   REQUIRED_GOAL_KEYS,
-  WATER_TARGET_ML,
-  WORKOUT_TARGET_MINUTES,
 } from "@/lib/config/75-soft";
+import { getYesterday } from "@/lib/dates";
+import { queryKeys } from "@/lib/query-keys";
 import { validateImage } from "@/lib/storage";
-import type {
-  AchievementDTO,
-  OptionalGoalDTO,
-  RequiredGoalKey,
-} from "@/lib/types";
-
-type AmountGoalKey = Exclude<RequiredGoalKey, "diet">;
+import type { AchievementDTO, DayRollupDTO, OptionalGoalDTO } from "@/lib/types";
 
 interface PostComposerProps {
   open: boolean;
   optionalGoals: OptionalGoalDTO[];
+  userId: string;
+  today: string;
   allowYesterday?: boolean;
   onClose: () => void;
   onPosted: () => void;
-}
-
-interface Amounts {
-  workout: string;
-  water: string;
-  reading: string;
-}
-
-interface Units {
-  workout: "minutes";
-  water: "ml" | "l";
-  reading: "pages";
 }
 
 interface PostMutationPayload {
@@ -50,22 +34,6 @@ interface PostMutationPayload {
     newAchievements?: AchievementDTO[];
   };
   error?: { message?: string };
-}
-
-function initialAmounts(): Amounts {
-  return {
-    workout: String(WORKOUT_TARGET_MINUTES),
-    water: String(WATER_TARGET_ML / 1_000),
-    reading: String(READING_TARGET_PAGES),
-  };
-}
-
-function initialUnits(): Units {
-  return {
-    workout: "minutes",
-    water: "l",
-    reading: "pages",
-  };
 }
 
 function createBrowserOperationId(): string {
@@ -83,20 +51,34 @@ function photoErrorMessage(error: "unsupported_type" | "too_large" | "empty") {
   }
 }
 
+async function fetchDay(localDate: string): Promise<DayRollupDTO> {
+  const response = await fetch(`/api/day/${localDate}`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const payload = (await response.json().catch(() => null)) as {
+    data?: DayRollupDTO;
+  } | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error("Could not load your progress for that day.");
+  }
+
+  return payload.data;
+}
+
 export function PostComposer({
   open,
   optionalGoals,
+  userId,
+  today,
   allowYesterday = true,
   onClose,
   onPosted,
 }: PostComposerProps) {
+  const router = useRouter();
   const [localDate, setLocalDate] = useState<"today" | "yesterday">("today");
-  const [selectedRequired, setSelectedRequired] = useState<RequiredGoalKey[]>(
-    [],
-  );
   const [selectedOptional, setSelectedOptional] = useState<string[]>([]);
-  const [amounts, setAmounts] = useState<Amounts>(initialAmounts);
-  const [units, setUnits] = useState<Units>(initialUnits);
   const [optionalValues, setOptionalValues] = useState<Record<string, string>>(
     {},
   );
@@ -112,13 +94,14 @@ export function PostComposer({
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
 
-  const toggleRequired = (key: RequiredGoalKey) => {
-    setSelectedRequired((current) =>
-      current.includes(key)
-        ? current.filter((entry) => entry !== key)
-        : [...current, key],
-    );
-  };
+  const resolvedDate = localDate === "today" ? today : getYesterday(today);
+  const dayQuery = useQuery({
+    queryKey: queryKeys.day(userId, resolvedDate),
+    queryFn: () => fetchDay(resolvedDate),
+    enabled: open,
+  });
+  const day = dayQuery.data;
+  const ready = Boolean(day && day.metCount >= 4);
 
   const toggleOptional = (id: string) => {
     setSelectedOptional((current) =>
@@ -130,10 +113,7 @@ export function PostComposer({
 
   const resetDraft = () => {
     setLocalDate("today");
-    setSelectedRequired([]);
     setSelectedOptional([]);
-    setAmounts(initialAmounts());
-    setUnits(initialUnits());
     setOptionalValues({});
     setOptionalCompleted({});
     setNote("");
@@ -161,14 +141,15 @@ export function PostComposer({
     setPhotoError(null);
   };
 
+  function goToTracker() {
+    onClose();
+    router.push(localDate === "today" ? "/today" : "/yesterday");
+  }
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
 
-    if (selectedRequired.length + selectedOptional.length === 0) {
-      setError("Select at least one goal.");
-      return;
-    }
     if (!photo) {
       setError("A photo is required to post an update.");
       return;
@@ -178,62 +159,33 @@ export function PostComposer({
     }
 
     try {
-      const goals = [
-        ...selectedRequired.map((key) => {
-          if (key === "diet") {
-            return { kind: "required" as const, key };
-          }
+      const goals = selectedOptional.map((id) => {
+        const goal = optionalGoals.find((entry) => entry.id === id);
+        if (!goal) {
+          throw new Error(
+            "One selected optional goal is no longer available.",
+          );
+        }
 
-          const amount = Number(amounts[key]);
-          const normalizedAmount =
-            key === "water" && units.water === "l" ? amount * 1_000 : amount;
-          if (
-            !Number.isFinite(amount) ||
-            amount <= 0 ||
-            !Number.isSafeInteger(normalizedAmount)
-          ) {
-            throw new Error(
-              key === "water"
-                ? "Water must resolve to a whole number of milliliters."
-                : `${REQUIRED_GOALS[key].label} needs a whole number.`,
-            );
-          }
-
-          return {
-            kind: "required" as const,
-            key,
-            amount,
-            unit: units[key],
-          };
-        }),
-        ...selectedOptional.map((id) => {
-          const goal = optionalGoals.find((entry) => entry.id === id);
-          if (!goal) {
-            throw new Error(
-              "One selected optional goal is no longer available.",
-            );
-          }
-
-          if (goal.targetValue === null) {
-            return {
-              kind: "optional" as const,
-              optionalGoalId: id,
-              completed: optionalCompleted[id] ?? false,
-            };
-          }
-
-          const value = Number(optionalValues[id]);
-          if (!Number.isFinite(value) || value <= 0) {
-            throw new Error(`${goal.name} needs a positive value.`);
-          }
-
+        if (goal.targetValue === null) {
           return {
             kind: "optional" as const,
             optionalGoalId: id,
-            value,
+            completed: optionalCompleted[id] ?? false,
           };
-        }),
-      ];
+        }
+
+        const value = Number(optionalValues[id]);
+        if (!Number.isFinite(value) || value <= 0) {
+          throw new Error(`${goal.name} needs a positive value.`);
+        }
+
+        return {
+          kind: "optional" as const,
+          optionalGoalId: id,
+          value,
+        };
+      });
 
       let nextOperationId = operationId;
       if (!nextOperationId) {
@@ -292,7 +244,7 @@ export function PostComposer({
         open={open}
         title="Post update"
       >
-        <form className="space-y-5" onSubmit={submit}>
+        <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="post-local-date">Day</Label>
             <select
@@ -309,261 +261,226 @@ export function PostComposer({
                 {allowYesterday ? "Yesterday" : "Yesterday (not available yet)"}
               </option>
             </select>
-            <p className="text-muted text-xs">
-              The server checks your local date and the active challenge window.
-            </p>
           </div>
 
-          <fieldset className="space-y-3">
-            <legend className="text-foreground text-sm font-semibold">
-              Goals
-            </legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {REQUIRED_GOAL_KEYS.map((key) => {
-                const selected = selectedRequired.includes(key);
-                return (
-                  <div
-                    className="border-border bg-card rounded-xl border p-3"
-                    key={key}
-                  >
-                    <button
-                      aria-pressed={selected}
-                      className={`min-h-11 w-full rounded-lg px-3 text-left text-sm font-semibold ${
-                        selected
-                          ? "bg-surface-accent text-primary"
-                          : "hover:bg-surface-accent"
-                      }`}
-                      onClick={() => toggleRequired(key)}
-                      type="button"
+          {dayQuery.isPending ? (
+            <p className="text-muted text-sm">Loading your progress…</p>
+          ) : null}
+
+          {dayQuery.isError ? (
+            <div className="space-y-2">
+              <p className="text-sm text-red-700" role="alert">
+                Could not load your progress for that day.
+              </p>
+              <Button
+                onClick={() => void dayQuery.refetch()}
+                type="button"
+                variant="secondary"
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+
+          {day && !ready ? (
+            <div className="border-border space-y-3 rounded-xl border border-dashed p-4">
+              <p className="font-semibold">
+                Finish {localDate}&rsquo;s goals to post
+              </p>
+              <p className="text-muted text-sm">
+                A post shares that day&rsquo;s results with a photo, so every
+                required goal needs to be met first — use the quick chips
+                (including Mark done) on the tracker if you want to finish
+                fast.
+              </p>
+              <ul className="space-y-1 text-sm">
+                {REQUIRED_GOAL_KEYS.map((key) => (
+                  <li className="flex items-center justify-between" key={key}>
+                    <span>{REQUIRED_GOALS[key].label}</span>
+                    <span
+                      className={
+                        day.goals[key].met ? "text-emerald-700" : "text-muted"
+                      }
                     >
-                      {selected ? "✓ " : ""}
-                      {REQUIRED_GOALS[key].label}
-                    </button>
-                    {selected && key !== "diet" ? (
-                      <>
-                        <div className="mt-3 flex gap-2">
-                          <Label
-                            className="sr-only"
-                            htmlFor={`post-${key}-amount`}
+                      {day.goals[key].met ? "Met" : "Not yet"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <Button onClick={goToTracker} type="button">
+                Go finish {localDate}&rsquo;s goals
+              </Button>
+            </div>
+          ) : null}
+
+          {day && ready ? (
+            <form className="space-y-5" onSubmit={submit}>
+              <fieldset className="border-border space-y-2 rounded-xl border p-3">
+                <legend className="text-foreground px-1 text-sm font-semibold">
+                  {localDate === "today" ? "Today" : "Yesterday"}&rsquo;s
+                  results
+                </legend>
+                <ul className="space-y-1 text-sm">
+                  {REQUIRED_GOAL_KEYS.map((key) => (
+                    <li
+                      className="flex items-center justify-between"
+                      key={key}
+                    >
+                      <span>{REQUIRED_GOALS[key].label}</span>
+                      <span className="text-emerald-700">
+                        ✓{" "}
+                        {key === "diet"
+                          ? "Met"
+                          : `${day.goals[key].amount ?? 0} ${day.goals[key].unit ?? ""}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </fieldset>
+
+              {optionalGoals.length > 0 ? (
+                <fieldset className="space-y-3">
+                  <legend className="text-foreground text-sm font-semibold">
+                    Optional goals
+                  </legend>
+                  <div className="space-y-2">
+                    {optionalGoals.map((goal) => {
+                      const selected = selectedOptional.includes(goal.id);
+                      return (
+                        <div
+                          className="border-border bg-card rounded-xl border p-3"
+                          key={goal.id}
+                        >
+                          <button
+                            aria-pressed={selected}
+                            className={`min-h-11 w-full rounded-lg px-3 text-left text-sm font-semibold ${
+                              selected
+                                ? "bg-surface-accent text-primary"
+                                : "hover:bg-surface-accent"
+                            }`}
+                            onClick={() => toggleOptional(goal.id)}
+                            type="button"
                           >
-                            {REQUIRED_GOALS[key].label} amount
-                          </Label>
-                          <Input
-                            id={`post-${key}-amount`}
-                            inputMode={
-                              key === "water" && units.water === "l"
-                                ? "decimal"
-                                : "numeric"
-                            }
-                            min="1"
-                            onChange={(event) =>
-                              setAmounts((current) => ({
-                                ...current,
-                                [key]: event.target.value,
-                              }))
-                            }
-                            step={
-                              key === "water" && units.water === "l"
-                                ? "any"
-                                : "1"
-                            }
-                            type="number"
-                            value={amounts[key as AmountGoalKey]}
-                          />
-                          {key === "water" ? (
-                            <select
-                              aria-label="Water unit"
-                              className="border-border bg-card min-h-11 rounded-xl border px-3 text-sm"
-                              onChange={(event) =>
-                                setUnits((current) => ({
-                                  ...current,
-                                  water: event.target.value as "ml" | "l",
-                                }))
-                              }
-                              value={units.water}
-                            >
-                              <option value="ml">ml</option>
-                              <option value="l">L</option>
-                            </select>
-                          ) : (
-                            <span className="text-muted flex items-center px-2 text-sm">
-                              {REQUIRED_GOALS[key].unit}
-                            </span>
-                          )}
-                        </div>
-                        {key === "workout" || key === "reading" ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {[
-                              key === "workout" ? 15 : 5,
-                              key === "workout" ? 30 : 10,
-                            ].map((quickAmount) => (
-                              <Button
-                                key={quickAmount}
-                                onClick={() =>
-                                  setAmounts((current) => ({
+                            {selected ? "✓ " : ""}
+                            {goal.name}
+                          </button>
+                          {selected && goal.targetValue !== null ? (
+                            <div className="mt-3 flex items-center gap-2">
+                              <Label
+                                className="sr-only"
+                                htmlFor={`optional-${goal.id}`}
+                              >
+                                {goal.name} value
+                              </Label>
+                              <Input
+                                id={`optional-${goal.id}`}
+                                min="0"
+                                onChange={(event) =>
+                                  setOptionalValues((current) => ({
                                     ...current,
-                                    [key]: String(quickAmount),
+                                    [goal.id]: event.target.value,
                                   }))
                                 }
-                                type="button"
-                                variant="secondary"
-                              >
-                                Use {quickAmount}
-                              </Button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {optionalGoals.length > 0 ? (
-            <fieldset className="space-y-3">
-              <legend className="text-foreground text-sm font-semibold">
-                Optional goals
-              </legend>
-              <div className="space-y-2">
-                {optionalGoals.map((goal) => {
-                  const selected = selectedOptional.includes(goal.id);
-                  return (
-                    <div
-                      className="border-border bg-card rounded-xl border p-3"
-                      key={goal.id}
-                    >
-                      <button
-                        aria-pressed={selected}
-                        className={`min-h-11 w-full rounded-lg px-3 text-left text-sm font-semibold ${
-                          selected
-                            ? "bg-surface-accent text-primary"
-                            : "hover:bg-surface-accent"
-                        }`}
-                        onClick={() => toggleOptional(goal.id)}
-                        type="button"
-                      >
-                        {selected ? "✓ " : ""}
-                        {goal.name}
-                      </button>
-                      {selected && goal.targetValue !== null ? (
-                        <div className="mt-3 flex items-center gap-2">
-                          <Label
-                            className="sr-only"
-                            htmlFor={`optional-${goal.id}`}
-                          >
-                            {goal.name} value
-                          </Label>
-                          <Input
-                            id={`optional-${goal.id}`}
-                            min="0"
-                            onChange={(event) =>
-                              setOptionalValues((current) => ({
-                                ...current,
-                                [goal.id]: event.target.value,
-                              }))
-                            }
-                            step="any"
-                            type="number"
-                            value={optionalValues[goal.id] ?? ""}
-                          />
-                          <span className="text-muted text-sm">
-                            {goal.unit}
-                          </span>
+                                step="any"
+                                type="number"
+                                value={optionalValues[goal.id] ?? ""}
+                              />
+                              <span className="text-muted text-sm">
+                                {goal.unit}
+                              </span>
+                            </div>
+                          ) : selected ? (
+                            <label className="text-muted mt-2 flex min-h-11 items-center gap-2 text-sm">
+                              <input
+                                checked={optionalCompleted[goal.id] ?? false}
+                                className="size-5"
+                                onChange={(event) =>
+                                  setOptionalCompleted((current) => ({
+                                    ...current,
+                                    [goal.id]: event.target.checked,
+                                  }))
+                                }
+                                type="checkbox"
+                              />
+                              Completed
+                            </label>
+                          ) : null}
                         </div>
-                      ) : selected ? (
-                        <label className="text-muted mt-2 flex min-h-11 items-center gap-2 text-sm">
-                          <input
-                            checked={optionalCompleted[goal.id] ?? false}
-                            className="size-5"
-                            onChange={(event) =>
-                              setOptionalCompleted((current) => ({
-                                ...current,
-                                [goal.id]: event.target.checked,
-                              }))
-                            }
-                            type="checkbox"
-                          />
-                          Completed
-                        </label>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ) : (
+                <p className="text-muted text-sm">
+                  Optional goals appear here once you create them in Me.
+                </p>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="post-note">Note (optional)</Label>
+                <textarea
+                  className="border-border bg-card text-foreground placeholder:text-muted focus-visible:ring-primary min-h-24 w-full resize-y rounded-xl border px-3 py-2 text-sm outline-none focus-visible:ring-2"
+                  id="post-note"
+                  maxLength={MAX_NOTE_CHARACTERS}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Add a little context…"
+                  value={note}
+                />
+                <p className="text-muted text-xs">
+                  {note.length}/{MAX_NOTE_CHARACTERS} characters
+                </p>
               </div>
-            </fieldset>
-          ) : (
-            <p className="text-muted text-sm">
-              Optional goals appear here once you create them in Me.
-            </p>
-          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="post-note">Note (optional)</Label>
-            <textarea
-              className="border-border bg-card text-foreground placeholder:text-muted focus-visible:ring-primary min-h-24 w-full resize-y rounded-xl border px-3 py-2 text-sm outline-none focus-visible:ring-2"
-              id="post-note"
-              maxLength={MAX_NOTE_CHARACTERS}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Add a little context…"
-              value={note}
-            />
-            <p className="text-muted text-xs">
-              {note.length}/{MAX_NOTE_CHARACTERS} characters
-            </p>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="post-photo">Photo</Label>
+                <input
+                  accept={POST_PHOTO_MIME_TYPES.join(",")}
+                  aria-required="true"
+                  className="border-border bg-card text-foreground min-h-11 w-full rounded-xl border p-2 text-sm"
+                  id="post-photo"
+                  onChange={(event) =>
+                    handlePhoto(event.currentTarget.files?.[0] ?? null)
+                  }
+                  required
+                  type="file"
+                />
+                {photo ? (
+                  <p className="text-muted text-xs">
+                    {photo.name} · {(photo.size / 1_000_000).toFixed(2)} MB
+                  </p>
+                ) : null}
+                <p className="text-muted text-xs">
+                  JPEG, PNG, or WebP up to {MAX_POST_PHOTO_BYTES / 1_000_000}{" "}
+                  MB.
+                </p>
+                {photoError ? (
+                  <p className="text-sm text-red-700" role="alert">
+                    {photoError}
+                  </p>
+                ) : null}
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="post-photo">Photo</Label>
-            <input
-              accept={POST_PHOTO_MIME_TYPES.join(",")}
-              aria-required="true"
-              className="border-border bg-card text-foreground min-h-11 w-full rounded-xl border p-2 text-sm"
-              id="post-photo"
-              onChange={(event) =>
-                handlePhoto(event.currentTarget.files?.[0] ?? null)
-              }
-              required
-              type="file"
-            />
-            {photo ? (
-              <p className="text-muted text-xs">
-                {photo.name} · {(photo.size / 1_000_000).toFixed(2)} MB
-              </p>
-            ) : null}
-            <p className="text-muted text-xs">
-              JPEG, PNG, or WebP up to {MAX_POST_PHOTO_BYTES / 1_000_000} MB.
-            </p>
-            {photoError ? (
-              <p className="text-sm text-red-700" role="alert">
-                {photoError}
-              </p>
-            ) : null}
-          </div>
+              {error ? (
+                <p
+                  aria-live="assertive"
+                  className="text-sm text-red-700"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              ) : null}
 
-          {error ? (
-            <p
-              aria-live="assertive"
-              className="text-sm text-red-700"
-              role="alert"
-            >
-              {error}
-            </p>
+              <Button className="w-full" disabled={submitting} type="submit">
+                {submitting ? "Posting…" : "Post update"}
+              </Button>
+              {operationId && error ? (
+                <p className="text-muted text-center text-xs">
+                  Retry will safely reuse this submission.
+                </p>
+              ) : null}
+            </form>
           ) : null}
-
-          <Button className="w-full" disabled={submitting} type="submit">
-            {submitting ? "Posting…" : "Post update"}
-          </Button>
-          {operationId && error ? (
-            <p className="text-muted text-center text-xs">
-              Retry will safely reuse this submission.
-            </p>
-          ) : null}
-          <p className="text-muted text-center text-xs">
-            Challenge started {COHORT_START_DATE}.
-          </p>
-        </form>
+        </div>
       </Sheet>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}

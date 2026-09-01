@@ -10,6 +10,8 @@ export interface FeedPostRow {
   local_date: string;
   note: string | null;
   photo_path: string;
+  required_snapshot: Record<string, unknown>;
+  team_id: string | null;
   status: PostStatus;
   client_operation_id: string;
   created_at: string;
@@ -25,6 +27,8 @@ export interface FeedPostInsert {
   local_date: string;
   note?: string | null;
   photo_path: string;
+  required_snapshot: Record<string, unknown>;
+  team_id?: string | null;
   status?: PostStatus;
   client_operation_id: string;
   created_at?: string;
@@ -196,7 +200,7 @@ export async function createFeedClient(): Promise<FeedClient> {
 }
 
 export const POST_COLUMNS =
-  "id, author_id, cohort_id, local_date, note, photo_path, status, client_operation_id, created_at, published_at, deleted_at, deleted_by";
+  "id, author_id, cohort_id, local_date, note, photo_path, required_snapshot, team_id, status, client_operation_id, created_at, published_at, deleted_at, deleted_by";
 
 export const ENTRY_COLUMNS =
   "id, post_id, required_goal_key, optional_goal_id, optional_goal_name, amount_int, diet_value, optional_value, optional_completed, created_at";

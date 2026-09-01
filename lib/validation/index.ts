@@ -117,45 +117,35 @@ export const reactionPaletteSchema = z.object({
     ),
 });
 
+// Required-goal entries are no longer client-submittable: the server derives
+// required state from that date's rollup (see TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md
+// §4.6), so this only ever carries optional-goal selections. An empty array is
+// valid -- a post's required-goal snapshot and photo are never empty on their own.
 export const postGoalInputSchema = z
-  .union([
-    z.object({
-      kind: z.literal("required"),
-      key: requiredGoalKeySchema,
-      amount: positiveAmountSchema.optional(),
-      unit: z.enum(["minutes", "ml", "l", "pages"]).optional(),
-      containerId: z.string().uuid().optional(),
-    }),
-    z
-      .object({
-        kind: z.literal("optional"),
-        optionalGoalId: z.string().uuid(),
-        value: z.number().finite().positive().nullable().optional(),
-        completed: z.boolean().nullable().optional(),
-      })
-      .superRefine((value, context) => {
-        const hasValue = value.value !== null && value.value !== undefined;
-        const hasCompleted =
-          value.completed !== null && value.completed !== undefined;
+  .object({
+    kind: z.literal("optional"),
+    optionalGoalId: z.string().uuid(),
+    value: z.number().finite().positive().nullable().optional(),
+    completed: z.boolean().nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    const hasValue = value.value !== null && value.value !== undefined;
+    const hasCompleted =
+      value.completed !== null && value.completed !== undefined;
 
-        if (hasValue === hasCompleted) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Provide either a numeric value or a checkbox state",
-          });
-        }
-      }),
-  ])
+    if (hasValue === hasCompleted) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide either a numeric value or a checkbox state",
+      });
+    }
+  })
   .array()
-  .min(1, "Select at least one goal")
   .superRefine((entries, context) => {
     const seen = new Set<string>();
 
     entries.forEach((entry, index) => {
-      const identity =
-        entry.kind === "required"
-          ? `required:${entry.key}`
-          : `optional:${entry.optionalGoalId}`;
+      const identity = `optional:${entry.optionalGoalId}`;
 
       if (seen.has(identity)) {
         context.addIssue({

@@ -20,6 +20,8 @@ import { PostComposer } from "./post-composer";
 interface FeedScreenProps {
   optionalGoals: OptionalGoalDTO[];
   optionalGoalsUnavailable?: boolean;
+  today: string;
+  userId: string;
 }
 
 interface FeedResponse {
@@ -70,6 +72,8 @@ async function fetchReactionPalette(): Promise<string[]> {
 export function FeedScreen({
   optionalGoals,
   optionalGoalsUnavailable = false,
+  today,
+  userId,
 }: FeedScreenProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -168,6 +172,8 @@ export function FeedScreen({
         onPosted={invalidateFeed}
         open={composerOpen}
         optionalGoals={optionalGoals}
+        today={today}
+        userId={userId}
       />
     </div>
   );

@@ -209,7 +209,11 @@ describe("W8 real API request contracts", () => {
   });
 
   describe("media limits and post validation", () => {
-    it("rejects an empty post goal list before publication", async () => {
+    it("rejects a post with no photo, even with an empty (now-valid) goal list", async () => {
+      // An empty goals array is valid on its own -- required-goal entries are
+      // no longer client-submittable and a post is never "empty" once the
+      // day's required snapshot is attached (TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md
+      // §4.6) -- but every post still requires a photo.
       const form = new FormData();
       const operationId = crypto.randomUUID();
       form.set("localDate", mutationDateOrSkip());
@@ -237,7 +241,7 @@ describe("W8 real API request contracts", () => {
       unsupported.set("localDate", mutationDateOrSkip());
       unsupported.set(
         "goals",
-        JSON.stringify([{ kind: "required", key: "diet" }]),
+        JSON.stringify([]),
       );
       unsupported.set("clientOperationId", unsupportedOperationId);
       unsupported.set(
@@ -265,7 +269,7 @@ describe("W8 real API request contracts", () => {
       oversized.set("localDate", mutationDateOrSkip());
       oversized.set(
         "goals",
-        JSON.stringify([{ kind: "required", key: "diet" }]),
+        JSON.stringify([]),
       );
       oversized.set("clientOperationId", oversizedOperationId);
       oversized.set(

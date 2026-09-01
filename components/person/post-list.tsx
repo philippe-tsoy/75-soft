@@ -1,6 +1,6 @@
 import { EmptyState } from "@/components/feedback/async-state";
 import { Card, CardHeader, CardTitle } from "@/components/ui";
-import { REQUIRED_GOALS } from "@/lib/config/75-soft";
+import { REQUIRED_GOALS, REQUIRED_GOAL_KEYS } from "@/lib/config/75-soft";
 import type { PostDTO } from "@/lib/types";
 
 interface PostListProps {
@@ -48,10 +48,27 @@ export function PostList({ posts }: PostListProps) {
                   {post.note}
                 </p>
               ) : null}
+              <ul
+                className="mt-3 flex flex-wrap gap-2"
+                aria-label="Required results"
+              >
+                {REQUIRED_GOAL_KEYS.map((key) => (
+                  <li
+                    className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800"
+                    key={`required-${key}`}
+                  >
+                    ✓{" "}
+                    {key === "diet"
+                      ? REQUIRED_GOALS.diet.label
+                      : `${REQUIRED_GOALS[key].label}: ${post.requiredSnapshot[key].amount} ${REQUIRED_GOALS[key].unit}`}
+                  </li>
+                ))}
+              </ul>
+
               {post.goals.length > 0 ? (
                 <ul
                   className="mt-3 flex flex-wrap gap-2"
-                  aria-label="Posted goals"
+                  aria-label="Posted optional goals"
                 >
                   {post.goals.map((goal, index) => (
                     <li

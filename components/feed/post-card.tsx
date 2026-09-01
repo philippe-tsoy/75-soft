@@ -10,10 +10,11 @@ import {
   COHORT_START_DATE,
   DEFAULT_REACTION_PALETTE,
   REQUIRED_GOALS,
+  REQUIRED_GOAL_KEYS,
 } from "@/lib/config/75-soft";
 import { formatInstantForViewer, getDayNumber } from "@/lib/dates";
 import { commentBodySchema, graphemeLength } from "@/lib/validation";
-import type { PostDTO } from "@/lib/types";
+import type { PostDTO, PostRequiredSnapshotDTO, RequiredGoalKey } from "@/lib/types";
 
 interface PostCardProps {
   post: PostDTO;
@@ -41,6 +42,19 @@ function displayTimestamp(value: string): string {
 
 function createBrowserOperationId(): string {
   return crypto.randomUUID();
+}
+
+function displayRequiredGoal(
+  key: RequiredGoalKey,
+  snapshot: PostRequiredSnapshotDTO,
+): string {
+  const label = REQUIRED_GOALS[key].label;
+  if (key === "diet") {
+    return `${label}: met`;
+  }
+
+  const goal = snapshot[key];
+  return `${label}: ${goal.amount} ${REQUIRED_GOALS[key].unit}`;
 }
 
 function displayGoal(goal: PostDTO["goals"][number]): string {
@@ -307,8 +321,19 @@ export function PostCard({
           ) : null}
         </div>
 
+        <ul className="flex flex-wrap gap-2" aria-label="Required results">
+          {REQUIRED_GOAL_KEYS.map((key) => (
+            <li
+              className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800"
+              key={`required-${key}`}
+            >
+              ✓ {displayRequiredGoal(key, post.requiredSnapshot)}
+            </li>
+          ))}
+        </ul>
+
         {post.goals.length > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="Selected goals">
+          <ul className="flex flex-wrap gap-2" aria-label="Selected optional goals">
             {post.goals.map((goal) => (
               <li
                 className="bg-surface-accent text-primary rounded-full px-3 py-1 text-xs font-semibold"

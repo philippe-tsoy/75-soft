@@ -67,11 +67,13 @@ export function TodayActions({
       <OptionalGoalsPanel localDate={localDate} />
 
       <PostComposer
+        allowYesterday={allowYesterday}
         onClose={() => setComposerOpen(false)}
         onPosted={handlePosted}
         open={composerOpen}
         optionalGoals={optionalGoalsQuery.data ?? []}
-        allowYesterday={allowYesterday}
+        today={localDate}
+        userId={userId}
       />
     </>
   );

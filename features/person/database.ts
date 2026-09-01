@@ -202,6 +202,30 @@ function normalizePostGoal(value: unknown): PostGoalDTO | null {
   return null;
 }
 
+function normalizeRequiredSnapshot(value: unknown) {
+  const row = isRecord(value) ? value : {};
+  const goal = (key: string) => {
+    const entry = row[key];
+    return isRecord(entry) ? entry : {};
+  };
+
+  return {
+    workout: {
+      amount: numberAt(goal("workout"), "amount") ?? 0,
+      met: booleanAt(goal("workout"), "met") ?? false,
+    },
+    water: {
+      amount: numberAt(goal("water"), "amount") ?? 0,
+      met: booleanAt(goal("water"), "met") ?? false,
+    },
+    reading: {
+      amount: numberAt(goal("reading"), "amount") ?? 0,
+      met: booleanAt(goal("reading"), "met") ?? false,
+    },
+    diet: { met: booleanAt(goal("diet"), "met") ?? false },
+  };
+}
+
 function normalizePost(value: unknown): PostDTO | null {
   const row = isRecord(value) ? value : {};
   const id = stringAt(row, "id");
@@ -232,6 +256,10 @@ function normalizePost(value: unknown): PostDTO | null {
     goals,
     note: stringAt(row, "note") ?? null,
     photoUrl: stringAt(row, "photoUrl", "photo_url") ?? null,
+    requiredSnapshot: normalizeRequiredSnapshot(
+      valueAt(row, "requiredSnapshot", "required_snapshot"),
+    ),
+    teamId: stringAt(row, "teamId", "team_id") ?? null,
     reactions,
     comments,
     canDelete: booleanAt(row, "canDelete", "can_delete") ?? false,

@@ -286,12 +286,16 @@ describe("API contract primitives", () => {
       expect(commentBodySchema.parse("  Nice work!  ")).toBe("Nice work!");
     });
 
-    it("rejects empty, duplicate, unknown, and malformed post goals", () => {
+    it("accepts an empty selection and rejects required/duplicate/malformed post goals", () => {
       const optionalGoalId = "00000000-0000-0000-0000-000000000010";
 
+      // Required-goal entries are no longer client-submittable -- the server
+      // derives required state from the day's rollup instead, and a post is
+      // never "empty" once its required snapshot and photo are attached. See
+      // TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md §4.6.
+      expect(postGoalInputSchema.safeParse([]).success).toBe(true);
       expect(
         postGoalInputSchema.safeParse([
-          { kind: "required", key: "workout", amount: 30 },
           {
             kind: "optional",
             optionalGoalId,
@@ -299,16 +303,15 @@ describe("API contract primitives", () => {
           },
         ]).success,
       ).toBe(true);
-      expect(postGoalInputSchema.safeParse([]).success).toBe(false);
       expect(
         postGoalInputSchema.safeParse([
-          { kind: "required", key: "unknown", amount: 30 },
+          { kind: "required", key: "workout", amount: 30 },
         ]).success,
       ).toBe(false);
       expect(
         postGoalInputSchema.safeParse([
-          { kind: "required", key: "workout", amount: 30 },
-          { kind: "required", key: "workout", amount: 15 },
+          { kind: "optional", optionalGoalId, completed: true },
+          { kind: "optional", optionalGoalId, completed: false },
         ]).success,
       ).toBe(false);
       expect(
@@ -443,6 +446,13 @@ describe("API contract primitives", () => {
         ],
         note: null,
         photoUrl: null,
+        requiredSnapshot: {
+          workout: { amount: 45, met: true },
+          water: { amount: 2_000, met: true },
+          reading: { amount: 10, met: true },
+          diet: { met: true },
+        },
+        teamId: null,
         reactions: [],
         comments: [],
         canDelete: true,

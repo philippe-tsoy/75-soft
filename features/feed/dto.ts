@@ -8,6 +8,7 @@ import type {
   CommentDTO,
   PostDTO,
   PostGoalDTO,
+  PostRequiredSnapshotDTO,
   ProfileDTO,
   ReactionSummaryDTO,
 } from "@/lib/types";
@@ -152,6 +153,30 @@ export function toCommentDTO(
   };
 }
 
+function normalizeRequiredSnapshot(value: unknown): PostRequiredSnapshotDTO {
+  const record =
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+  const goal = (key: string): Record<string, unknown> => {
+    const entry = record[key];
+    return entry && typeof entry === "object"
+      ? (entry as Record<string, unknown>)
+      : {};
+  };
+  const amount = (key: string): number => {
+    const raw = goal(key).amount;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  };
+  const met = (key: string): boolean => goal(key).met === true;
+
+  return {
+    workout: { amount: amount("workout"), met: met("workout") },
+    water: { amount: amount("water"), met: met("water") },
+    reading: { amount: amount("reading"), met: met("reading") },
+    diet: { met: met("diet") },
+  };
+}
+
 export function toPostDTO(
   hydrated: HydratedPost,
   viewerId: string,
@@ -179,6 +204,8 @@ export function toPostDTO(
     goals,
     note: hydrated.row.note,
     photoUrl: hydrated.photoUrl,
+    requiredSnapshot: normalizeRequiredSnapshot(hydrated.row.required_snapshot),
+    teamId: hydrated.row.team_id,
     reactions: summarizeReactions(hydrated.reactions, palette, viewerId),
     comments,
     canDelete: viewerIsAdmin || hydrated.row.author_id === viewerId,

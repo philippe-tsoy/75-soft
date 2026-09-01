@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { DEFAULT_REACTION_PALETTE, REQUIRED_GOALS } from "@/lib/config/75-soft";
+import { DEFAULT_REACTION_PALETTE } from "@/lib/config/75-soft";
 import {
   buildPostPhotoPath,
   createMemberSignedUrl,
@@ -8,7 +8,7 @@ import {
 } from "@/lib/storage";
 import type { Database as CoreDatabase } from "@/lib/supabase/database.types";
 import { HttpError } from "@/lib/http";
-import { normalizeWaterAmount, reactionPaletteSchema } from "@/lib/validation";
+import { reactionPaletteSchema } from "@/lib/validation";
 import type { AchievementDTO, PostDTO, ProfileDTO } from "@/lib/types";
 
 import {
@@ -25,7 +25,6 @@ import {
   type PostGoalEntryRow,
   type ProfileRow,
   type ReactionRow,
-  type WaterContainerRow,
 } from "./database";
 import { decodeFeedCursor, encodeFeedCursor, parseFeedLimit } from "./cursor";
 import {
@@ -34,7 +33,6 @@ import {
   parseOptionalOperationId,
   parseReactionEmoji,
   parseReactionPalette,
-  parseRequiredWholeAmount,
 } from "./validation";
 import type { PostGoalInput } from "./validation-types";
 import { createFeedScoringAdapter } from "./scoring-adapter";
@@ -161,10 +159,6 @@ function invalidGoal(message: string): never {
   throw new HttpError(400, "VALIDATION_ERROR", message);
 }
 
-function amountUnitForGoal(key: "workout" | "water" | "reading"): string {
-  return REQUIRED_GOALS[key].unit;
-}
-
 async function normalizePostGoals(
   client: FeedClient,
   authorId: string,
@@ -173,108 +167,6 @@ async function normalizePostGoals(
   const entries: Omit<PostGoalEntryInsert, "post_id">[] = [];
 
   for (const goal of goals) {
-    if (goal.kind === "required") {
-      if (goal.key === "diet") {
-        if (
-          goal.amount !== undefined ||
-          goal.unit !== undefined ||
-          goal.containerId !== undefined
-        ) {
-          invalidGoal("Diet posts do not accept an amount");
-        }
-
-        entries.push({
-          required_goal_key: "diet",
-          optional_goal_id: null,
-          optional_goal_name: null,
-          amount_int: null,
-          diet_value: true,
-          optional_value: null,
-          optional_completed: null,
-        });
-        continue;
-      }
-
-      if (goal.key === "water") {
-        if (
-          goal.containerId !== undefined &&
-          (goal.amount !== undefined || goal.unit !== undefined)
-        ) {
-          invalidGoal("Choose a water container or a custom amount");
-        }
-
-        let amountInt: number;
-        if (goal.containerId !== undefined) {
-          const { data, error } = await client
-            .from("water_containers")
-            .select("id, owner_id, volume_ml, active")
-            .eq("id", goal.containerId)
-            .eq("owner_id", authorId)
-            .maybeSingle();
-
-          if (error) {
-            throwDatabaseError("Unable to resolve the water container", error);
-          }
-
-          const container = data as WaterContainerRow | null;
-          if (!container || container.active === false) {
-            throw new HttpError(
-              422,
-              "BUSINESS_RULE_VIOLATION",
-              "That water container is not available",
-            );
-          }
-
-          amountInt = parseRequiredWholeAmount(
-            container.volume_ml,
-            "container volume",
-          );
-        } else {
-          if (
-            goal.amount === undefined ||
-            goal.unit === undefined ||
-            (goal.unit !== "ml" && goal.unit !== "l")
-          ) {
-            invalidGoal("Water requires an amount and unit");
-          }
-          amountInt = normalizeWaterAmount(goal.amount, goal.unit);
-        }
-
-        entries.push({
-          required_goal_key: "water",
-          optional_goal_id: null,
-          optional_goal_name: null,
-          amount_int: amountInt,
-          diet_value: null,
-          optional_value: null,
-          optional_completed: null,
-        });
-        continue;
-      }
-
-      if (
-        goal.unit !== undefined &&
-        goal.unit !== amountUnitForGoal(goal.key)
-      ) {
-        invalidGoal(`${goal.key} has an invalid unit`);
-      }
-
-      const amount = parseRequiredWholeAmount(
-        goal.amount,
-        `${goal.key} amount`,
-      );
-      entries.push({
-        required_goal_key: goal.key,
-        optional_goal_id: null,
-        optional_goal_name: null,
-        amount_int: amount,
-        diet_value: null,
-        optional_value: null,
-        optional_completed: null,
-      });
-      continue;
-    }
-
     const { data, error } = await client
       .from("optional_goals")
       .select("id, owner_id, name, target_value, unit, active")
@@ -323,10 +215,6 @@ async function normalizePostGoals(
       optional_value: isNumeric ? goal.value : null,
       optional_completed: isNumeric ? null : goal.completed,
     });
-  }
-
-  if (entries.length === 0) {
-    invalidGoal("Select at least one goal");
   }
 
   return entries;
@@ -528,6 +416,8 @@ export async function createPost(input: {
   goals: readonly PostGoalInput[];
   note: string | null;
   photo: File;
+  requiredSnapshot: Record<string, unknown>;
+  teamId: string | null;
   clientOperationId: string;
   scoring?: FeedScoringAdapter;
 }): Promise<CreatePostResult> {
@@ -568,6 +458,8 @@ export async function createPost(input: {
     local_date: input.localDate,
     note: input.note,
     photo_path: photoPath,
+    required_snapshot: input.requiredSnapshot,
+    team_id: input.teamId,
     status: "pending",
     client_operation_id: input.clientOperationId,
   };

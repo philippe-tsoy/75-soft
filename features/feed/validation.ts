@@ -78,7 +78,10 @@ function parseOperationId(request: Request, formData: FormData): string {
 function parseGoals(formData: FormData): PostGoalInput[] {
   const rawGoals = formString(formData, "goals");
   if (!rawGoals) {
-    validationError("At least one goal is required");
+    // Optional-goal selection is the only thing left in this field; an empty
+    // post is still meaningful once every required goal is met and a photo
+    // is attached, so an absent/empty value is not an error.
+    return [];
   }
 
   let decoded: unknown;
