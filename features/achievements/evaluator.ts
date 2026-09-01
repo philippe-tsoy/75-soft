@@ -119,14 +119,6 @@ function hasFullDayAfterMiss(evidence: AchievementEvidence): boolean {
   });
 }
 
-function hasWorkoutAndReadingPost(evidence: AchievementEvidence): boolean {
-  return getValidPosts(evidence).some(
-    (post) =>
-      post.requiredGoals.includes("workout") &&
-      post.requiredGoals.includes("reading"),
-  );
-}
-
 function hasSevenPhotos(evidence: AchievementEvidence): boolean {
   return getValidPosts(evidence).filter((post) => post.hasPhoto).length >= 7;
 }
@@ -182,8 +174,6 @@ function isCandidate(
       return hasWaterMilestoneBeforeNoon(evidence);
     case "FULL_DAY_AFTER_MISS":
       return hasFullDayAfterMiss(evidence);
-    case "WORKOUT_READING_ONE_POST":
-      return hasWorkoutAndReadingPost(evidence);
     case "SEVEN_PHOTOS":
       return hasSevenPhotos(evidence);
     case "WATER_EXACT_TARGET":

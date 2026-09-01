@@ -58,13 +58,6 @@ export const ACHIEVEMENT_CATALOG: readonly AchievementDefinition[] = [
     priority: 70,
   },
   {
-    code: "WORKOUT_READING_ONE_POST",
-    title: "Double Duty",
-    description: "Include workout and reading in one Post update.",
-    isHidden: true,
-    priority: 80,
-  },
-  {
     code: "SEVEN_PHOTOS",
     title: "Seven Photos",
     description: "Publish seven photo updates.",

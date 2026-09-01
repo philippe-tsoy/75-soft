@@ -164,7 +164,6 @@ declare
   three_posts_one_day boolean := false;
   water_before_noon boolean := false;
   full_day_after_miss boolean := false;
-  workout_reading_one_post boolean := false;
   seven_photos boolean := false;
   water_exact_target boolean := false;
   water_flags record;
@@ -249,36 +248,6 @@ begin
       )
     group by post.local_date
     having count(*) >= 3
-  );
-
-  workout_reading_one_post := exists (
-    select 1
-    from public.posts as post
-    where post.author_id = p_user_id
-      and post.cohort_id = private.active_cohort_id()
-      and post.status = 'published'
-      and post.local_date >= greatest(join_date, cohort_start)
-      and post.local_date <= local_today
-      and coalesce(post.published_at, post.created_at) <= p_now
-      and not exists (
-        select 1
-        from public.day_overrides as day_override
-        where day_override.user_id = p_user_id
-          and day_override.local_date = post.local_date
-          and day_override.kind = 'invalidated'
-      )
-      and exists (
-        select 1
-        from public.post_goal_entries as workout_entry
-        where workout_entry.post_id = post.id
-          and workout_entry.required_goal_key = 'workout'
-      )
-      and exists (
-        select 1
-        from public.post_goal_entries as reading_entry
-        where reading_entry.post_id = post.id
-          and reading_entry.required_goal_key = 'reading'
-      )
   );
 
   seven_photos := (
@@ -384,9 +353,6 @@ begin
   end if;
   if full_day_after_miss then
     return query select 'FULL_DAY_AFTER_MISS'::text;
-  end if;
-  if workout_reading_one_post then
-    return query select 'WORKOUT_READING_ONE_POST'::text;
   end if;
   if seven_photos then
     return query select 'SEVEN_PHOTOS'::text;

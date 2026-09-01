@@ -62,7 +62,6 @@ describe("achievement catalog and evaluator", () => {
       "THREE_POSTS_ONE_DAY",
       "WATER_BEFORE_NOON",
       "FULL_DAY_AFTER_MISS",
-      "WORKOUT_READING_ONE_POST",
       "SEVEN_PHOTOS",
       "WATER_EXACT_TARGET",
     ]);
@@ -92,22 +91,14 @@ describe("achievement catalog and evaluator", () => {
     const evidence: AchievementEvidence = {
       ...emptyEvidence,
       currentDayNumber: 75,
-      posts: [
-        post("1", { hasPhoto: true, requiredGoals: ["workout", "reading"] }),
-      ],
+      posts: [post("1", { hasPhoto: true })],
       days: [day("2026-09-10", { status: "complete", metCount: 4 })],
     };
 
     const result = evaluateAchievementRules(evidence);
 
     expect(result.newlyUnlocked.map((achievement) => achievement.code)).toEqual(
-      [
-        "FIRST_UPDATE",
-        "FIRST_FULL_DAY",
-        "FIRST_PHOTO",
-        "DAY_75",
-        "WORKOUT_READING_ONE_POST",
-      ],
+      ["FIRST_UPDATE", "FIRST_FULL_DAY", "FIRST_PHOTO", "DAY_75"],
     );
     expect(result.toast?.code).toBe("FIRST_UPDATE");
   });
