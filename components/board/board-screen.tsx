@@ -103,7 +103,7 @@ export function BoardScreen() {
           <p className="text-primary text-sm font-semibold tracking-wide">
             Daily standings
           </p>
-          <h1 className="mt-1 text-3xl font-semibold">Board</h1>
+          <h1 className="mt-1 text-3xl font-semibold">Ranking</h1>
           <p className="text-muted mt-2 text-sm leading-6">
             Each member is scored on their own current local date. Ties share a
             rank.
@@ -128,7 +128,7 @@ export function BoardScreen() {
       </div>
 
       <div
-        aria-label="Board view"
+        aria-label="Ranking view"
         className="border-border bg-card inline-flex rounded-xl border p-1"
         role="group"
       >
@@ -184,7 +184,7 @@ export function BoardScreen() {
                 <div
                   className="space-y-2"
                   role="list"
-                  aria-label="Board standings"
+                  aria-label="Ranking standings"
                 >
                   {board.data.map((entry) => (
                     <div key={entry.user.id} role="listitem">

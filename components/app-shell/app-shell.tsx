@@ -5,13 +5,78 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { MemberAvatar } from "@/components/board/member-avatar";
+import { ChallengeMark } from "@/components/brand/challenge-mark";
 import type { ProfileDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+interface TabIconProps {
+  className?: string;
+}
+
+function TodayIcon({ className }: TabIconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.8}
+      viewBox="0 0 24 24"
+    >
+      <rect height="18" rx="2" width="14" x="5" y="3" />
+      <path d="M9 3v2h6V3" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+function RankingIcon({ className }: TabIconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.8}
+      viewBox="0 0 24 24"
+    >
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4z" />
+      <path d="M7 5H4v1a3 3 0 0 0 3 3" />
+      <path d="M17 5h3v1a3 3 0 0 1-3 3" />
+      <path d="M12 13v4" />
+      <path d="M9 21h6" />
+    </svg>
+  );
+}
+
+function FeedIcon({ className }: TabIconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.8}
+      viewBox="0 0 24 24"
+    >
+      <rect height="16" rx="2" width="16" x="4" y="4" />
+      <path d="M8 9h8" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
+    </svg>
+  );
+}
+
 const tabs = [
-  { href: "/today", label: "Today" },
-  { href: "/feed", label: "Feed" },
-  { href: "/board", label: "Board" },
+  { href: "/today", label: "Today", Icon: TodayIcon },
+  { href: "/board", label: "Ranking", Icon: RankingIcon },
+  { href: "/feed", label: "Feed", Icon: FeedIcon },
 ] as const;
 
 interface AppShellProps {
@@ -31,32 +96,42 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 pt-5 pb-2 sm:px-6">
-        <div>
-          <p className="text-primary text-sm font-semibold tracking-wide">
-            75 Soft
-          </p>
-          <div className="text-muted flex items-center gap-2 text-xs">
-            {localDate ? <time dateTime={localDate}>{localDate}</time> : null}
-            {dayNumber && dayNumber > 0 ? (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>Day {dayNumber}</span>
-              </>
-            ) : null}
+      <header className="border-border bg-card sticky top-0 z-30 border-b">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="bg-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+              <ChallengeMark fill="#ffffff" size={20} />
+            </span>
+            <div>
+              <p className="text-foreground text-sm leading-tight font-semibold tracking-wide">
+                75 Soft
+              </p>
+              <div className="mt-1 flex items-center gap-2 text-xs">
+                {localDate ? (
+                  <time className="text-muted" dateTime={localDate}>
+                    {localDate}
+                  </time>
+                ) : null}
+                {dayNumber && dayNumber > 0 ? (
+                  <span className="bg-surface-accent text-primary rounded-full px-2 py-0.5 font-semibold">
+                    Day {dayNumber}
+                  </span>
+                ) : null}
+              </div>
+            </div>
           </div>
+          <Link
+            aria-label="Open Me"
+            className="border-border bg-card text-primary focus-visible:ring-primary flex min-h-11 min-w-11 items-center justify-center rounded-full border text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none"
+            href="/me"
+          >
+            {profile ? (
+              <MemberAvatar className="h-10 w-10" profile={profile} />
+            ) : (
+              "Me"
+            )}
+          </Link>
         </div>
-        <Link
-          aria-label="Open Me"
-          className="border-border bg-card text-primary focus-visible:ring-primary flex min-h-11 min-w-11 items-center justify-center rounded-full border text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none"
-          href="/me"
-        >
-          {profile ? (
-            <MemberAvatar className="h-10 w-10" profile={profile} />
-          ) : (
-            "Me"
-          )}
-        </Link>
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-4 pb-28 sm:px-6">
@@ -68,23 +143,29 @@ export function AppShell({
         className="border-border bg-card/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
         <div className="mx-auto grid max-w-3xl grid-cols-3 gap-1 p-2">
-          {tabs.map((tab) => {
-            const active =
-              pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+          {tabs.map(({ href, label, Icon }) => {
+            const active = pathname === href || pathname.startsWith(`${href}/`);
 
             return (
               <Link
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "focus-visible:ring-primary flex min-h-11 items-center justify-center rounded-xl border-b-2 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none",
-                  active
-                    ? "border-primary bg-surface-accent text-primary"
-                    : "text-muted hover:bg-surface-accent hover:text-foreground border-transparent",
-                )}
-                href={tab.href}
-                key={tab.href}
+                className="focus-visible:ring-primary flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                href={href}
+                key={href}
               >
-                {tab.label}
+                <span
+                  className={cn(
+                    "flex h-9 w-14 items-center justify-center rounded-full transition-colors",
+                    active
+                      ? "bg-surface-accent text-primary"
+                      : "text-muted",
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className={active ? "text-primary" : "text-muted"}>
+                  {label}
+                </span>
               </Link>
             );
           })}

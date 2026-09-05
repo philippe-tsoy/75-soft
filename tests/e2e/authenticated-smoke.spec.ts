@@ -13,7 +13,7 @@ test.describe("W8 authenticated member browser smoke", () => {
     "[W8 E2E] Set W8_E2E_MEMBER_STORAGE_STATE to a real authenticated Playwright storage state.",
   );
 
-  test("navigates the Today, Feed, Board, and Me journeys", async ({
+  test("navigates the Today, Feed, Ranking, and Me journeys", async ({
     page,
   }) => {
     await page.goto("/today");
@@ -24,15 +24,15 @@ test.describe("W8 authenticated member browser smoke", () => {
     });
     await expect(navigation.getByRole("link", { name: "Today" })).toBeVisible();
     await expect(navigation.getByRole("link", { name: "Feed" })).toBeVisible();
-    await expect(navigation.getByRole("link", { name: "Board" })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: "Ranking" })).toBeVisible();
 
     await navigation.getByRole("link", { name: "Feed" }).click();
     await expect(page).toHaveURL(/\/feed$/);
     await expect(page.getByRole("heading", { name: "Feed" })).toBeVisible();
 
-    await navigation.getByRole("link", { name: "Board" }).click();
+    await navigation.getByRole("link", { name: "Ranking" }).click();
     await expect(page).toHaveURL(/\/board$/);
-    await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ranking" })).toBeVisible();
 
     await page.getByRole("link", { name: "Open Me" }).click();
     await expect(page).toHaveURL(/\/me$/);
@@ -47,7 +47,7 @@ test.describe("W8 authenticated member browser smoke", () => {
     const navigation = page.getByRole("navigation", {
       name: "Primary navigation",
     });
-    for (const label of ["Today", "Feed", "Board"]) {
+    for (const label of ["Today", "Feed", "Ranking"]) {
       const link = navigation.getByRole("link", { name: label });
       await link.focus();
       await expect(link).toBeFocused();
