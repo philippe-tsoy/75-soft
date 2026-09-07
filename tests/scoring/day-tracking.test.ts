@@ -9,12 +9,13 @@ import {
   mapDayRollupRow,
   mapDailyBoardScoreRow,
   resolveAmountFill,
+  withGoalState,
 } from "@/features/day-tracking";
 import type {
   DayRollupRow,
   DayTrackingClient,
 } from "@/features/day-tracking/database";
-import type { DayRollupDTO } from "@/lib/types";
+import type { DayRollupDTO, GoalProgressDTO } from "@/lib/types";
 
 const emptyDay: DayRollupDTO = {
   localDate: "2026-09-02",
@@ -221,6 +222,37 @@ describe("W2 optimistic controls", () => {
       action: "revert",
       nextValue: 30,
     });
+  });
+
+  it("merges a single goal's confirmed state without clobbering a concurrently in-flight one", () => {
+    // Two different goals are both optimistically ahead of the server.
+    const bothOptimistic = applyOptimisticAmount(
+      applyOptimisticAmount(emptyDay, "workout", 15, "2026-09-02"),
+      "water",
+      250,
+      "2026-09-02",
+    );
+    expect(bothOptimistic.goals.workout.amount).toBe(45);
+    expect(bothOptimistic.goals.water.amount).toBe(2_000);
+
+    // Water's request resolves first; its response only speaks for water.
+    const serverWaterState: GoalProgressDTO = {
+      amount: 2_000,
+      target: 2_000,
+      unit: "ml",
+      met: true,
+    };
+    const merged = withGoalState(
+      bothOptimistic,
+      "water",
+      serverWaterState,
+      "2026-09-02",
+    );
+
+    expect(merged.goals.water).toEqual(serverWaterState);
+    // Workout's own still-in-flight optimistic value must survive untouched.
+    expect(merged.goals.workout.amount).toBe(45);
+    expect(merged.metCount).toBe(2);
   });
 
   it("toggles a manual done flag independently of the amount", () => {

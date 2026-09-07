@@ -1,5 +1,5 @@
 import { countMetGoals, deriveDayStatus } from "@/lib/scoring";
-import type { DayRollupDTO } from "@/lib/types";
+import type { DayRollupDTO, GoalProgressDTO } from "@/lib/types";
 
 type AmountGoal = "workout" | "water" | "reading";
 
@@ -26,6 +26,21 @@ function withGoalStates(
       metCount,
     }),
   };
+}
+
+/**
+ * Merges a single goal's confirmed (or reverted) state into a day snapshot
+ * and recomputes metCount/status from the result. Used instead of replacing
+ * the whole day so that a response or rollback for one goal never clobbers
+ * another goal's independently in-flight optimistic update.
+ */
+export function withGoalState(
+  day: DayRollupDTO,
+  goal: keyof DayRollupDTO["goals"],
+  goalProgress: GoalProgressDTO,
+  today: string,
+): DayRollupDTO {
+  return withGoalStates(day, { ...day.goals, [goal]: goalProgress }, today);
 }
 
 /**

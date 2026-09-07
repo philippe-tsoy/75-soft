@@ -1,6 +1,7 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { Card } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import type { GoalProgressDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,11 @@ interface GoalControlProps {
    * card, which has no amount/target at all).
    */
   toggleLocked?: boolean;
+  /** This card's own failed-mutation message, if any. */
+  error?: string | null;
+  sessionExpired?: boolean;
+  /** Re-attempts the failed mutation with the same idempotency key. */
+  onRetry?: () => void;
 }
 
 function formatAmount(value: number, unit: string | null | undefined): string {
@@ -58,6 +64,9 @@ export function GoalControl({
   titleAction,
   onToggleDone,
   toggleLocked,
+  error,
+  sessionExpired,
+  onRetry,
 }: GoalControlProps) {
   const amount =
     progress.amount !== undefined && progress.target !== undefined
@@ -126,6 +135,28 @@ export function GoalControl({
           <CheckIcon />
         </button>
       </div>
+      {error ? (
+        <div
+          aria-live="assertive"
+          className="flex flex-wrap items-center gap-3 text-sm text-red-700"
+          role="alert"
+        >
+          <p>{error}</p>
+          {onRetry ? (
+            <Button disabled={pending} onClick={onRetry} variant="secondary">
+              Retry
+            </Button>
+          ) : null}
+          {sessionExpired ? (
+            <Link
+              className="font-semibold underline underline-offset-2"
+              href="/login"
+            >
+              Sign in again
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
       {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
     </Card>
   );

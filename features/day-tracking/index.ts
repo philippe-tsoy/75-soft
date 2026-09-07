@@ -24,6 +24,7 @@ export {
   applyOptimisticDiet,
   applyOptimisticAmountGoalDone,
   resolveAmountFill,
+  withGoalState,
   type AmountFillResolution,
 } from "./optimistic";
 export {

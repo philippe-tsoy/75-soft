@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,9 +15,9 @@ import {
 import {
   amountDeltaTo,
   applyOptimisticAmount,
-  applyOptimisticAmountGoalDone,
   applyOptimisticDiet,
   resolveAmountFill,
+  withGoalState,
 } from "@/features/day-tracking/optimistic";
 import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
 import type {
@@ -67,6 +66,9 @@ const AMOUNT_UNITS: Record<AmountGoal, AmountUnit> = {
 
 type AmountGoal = "workout" | "water" | "reading";
 
+/** The four independently-editable cards on the tracker. */
+type GoalKey = AmountGoal | "diet";
+
 interface DayMutationResponse {
   day: DayRollupDTO;
   newAchievements?: AchievementDTO[];
@@ -74,28 +76,12 @@ interface DayMutationResponse {
 
 type AmountUnit = "minutes" | "ml" | "l" | "pages";
 
-type RetryAction =
-  | {
-      kind: "amount";
-      goal: AmountGoal;
-      amount: number;
-      unit: AmountUnit;
-      operationId: string;
-    }
-  | {
-      kind: "container";
-      container: ContainerDTO;
-      operationId: string;
-    }
-  | {
-      kind: "diet";
-      operationId: string;
-    }
-  | {
-      kind: "goalDone";
-      goal: AmountGoal;
-      operationId: string;
-    };
+interface GoalErrorState {
+  message: string;
+  sessionExpired: boolean;
+  /** Re-attempts the failed mutation with the same idempotency key. */
+  retry: () => void;
+}
 
 function formatStatus(status: DayRollupDTO["status"]): string {
   return status.replace("_", " ");
@@ -363,6 +349,9 @@ function ProgressControl({
   onAdd,
   onToggleDone,
   toggleLocked,
+  error,
+  sessionExpired,
+  onRetry,
   quickAmounts,
   unitLabel,
   inputLabel,
@@ -374,6 +363,9 @@ function ProgressControl({
   onAdd: (amount: number) => void;
   onToggleDone: () => void;
   toggleLocked: boolean;
+  error?: string | null;
+  sessionExpired?: boolean;
+  onRetry?: () => void;
   quickAmounts: number[];
   unitLabel: string;
   inputLabel: string;
@@ -381,9 +373,12 @@ function ProgressControl({
 }) {
   return (
     <GoalControl
+      error={error}
+      onRetry={onRetry}
       onToggleDone={onToggleDone}
       pending={pending}
       progress={progress}
+      sessionExpired={sessionExpired}
       title={title}
       toggleLocked={toggleLocked}
     >
@@ -417,6 +412,9 @@ function SliderControl({
   onSetAmount,
   onToggleDone,
   toggleLocked,
+  error,
+  sessionExpired,
+  onRetry,
 }: {
   title: string;
   goal: AmountGoal;
@@ -426,12 +424,18 @@ function SliderControl({
   onSetAmount: (nextValue: number) => void;
   onToggleDone: () => void;
   toggleLocked: boolean;
+  error?: string | null;
+  sessionExpired?: boolean;
+  onRetry?: () => void;
 }) {
   return (
     <GoalControl
+      error={error}
+      onRetry={onRetry}
       onToggleDone={onToggleDone}
       pending={pending}
       progress={progress}
+      sessionExpired={sessionExpired}
       title={title}
       toggleLocked={toggleLocked}
     >
@@ -460,17 +464,36 @@ export function DayTracker({
   const [day, setDay] = useState(initialDay);
   const [containers, setContainers] = useState(initialContainers);
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [sessionExpired, setSessionExpired] = useState(false);
-  const [retryAction, setRetryAction] = useState<RetryAction | null>(null);
+  const [goalErrors, setGoalErrors] = useState<
+    Partial<Record<GoalKey, GoalErrorState>>
+  >({});
   const [containersOpen, setContainersOpen] = useState(false);
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
   const [preFillAmount, setPreFillAmount] = useState<
     Partial<Record<AmountGoal, number>>
   >({});
-  const dayMutationPending = Object.values(pending).some(Boolean);
   const useSliders = amountInputMode === "slider";
+
+  function isPending(goal: GoalKey): boolean {
+    return Boolean(pending[goal]);
+  }
+
+  function setGoalError(goal: GoalKey, state: GoalErrorState) {
+    setGoalErrors((current) => ({ ...current, [goal]: state }));
+  }
+
+  function clearGoalError(goal: GoalKey) {
+    setGoalErrors((current) => {
+      if (!(goal in current)) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[goal];
+      return next;
+    });
+  }
 
   function refreshRelatedData() {
     invalidateDayTracking(queryClient, userId, day.localDate);
@@ -499,35 +522,25 @@ export function DayTracker({
     unit: AmountUnit,
     retryOperationId?: string,
   ) {
-    if (dayMutationPending) {
+    if (isPending(goal)) {
       return;
     }
     if (!day.editable) {
-      setError("This day is view-only.");
       return;
     }
 
-    const previous = day;
+    const previousGoalProgress = day.goals[goal];
     const operation = withOperationId(retryOperationId);
-    const action: RetryAction = {
-      amount,
-      goal,
-      kind: "amount",
-      operationId: operation.operationId,
-      unit,
-    };
-    setDay(
+    setDay((prevDay) =>
       applyOptimisticAmount(
-        day,
+        prevDay,
         goal,
         toOptimisticAmount(goal, amount, unit),
         today,
       ),
     );
     setGoalPending(goal, true);
-    setError(null);
-    setSessionExpired(false);
-    setRetryAction(null);
+    clearGoalError(goal);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -543,16 +556,21 @@ export function DayTracker({
           }),
         },
       );
-      setDay(result.day);
+      setDay((prevDay) =>
+        withGoalState(prevDay, goal, result.day.goals[goal], today),
+      );
       setAchievementToast(result.newAchievements?.[0] ?? null);
       refreshRelatedData();
     } catch (requestError) {
-      setDay(previous);
-      setError(apiErrorMessage(requestError));
-      setSessionExpired(
-        requestError instanceof DayApiError && requestError.status === 401,
+      setDay((prevDay) =>
+        withGoalState(prevDay, goal, previousGoalProgress, today),
       );
-      setRetryAction(action);
+      setGoalError(goal, {
+        message: apiErrorMessage(requestError),
+        sessionExpired:
+          requestError instanceof DayApiError && requestError.status === 401,
+        retry: () => void addAmount(goal, amount, unit, operation.operationId),
+      });
     } finally {
       setGoalPending(goal, false);
     }
@@ -562,26 +580,20 @@ export function DayTracker({
     container: ContainerDTO,
     retryOperationId?: string,
   ) {
-    if (dayMutationPending) {
+    if (isPending("water")) {
       return;
     }
     if (!day.editable) {
-      setError("This day is view-only.");
       return;
     }
 
-    const previous = day;
+    const previousGoalProgress = day.goals.water;
     const operation = withOperationId(retryOperationId);
-    const action: RetryAction = {
-      container,
-      kind: "container",
-      operationId: operation.operationId,
-    };
-    setDay(applyOptimisticAmount(day, "water", container.volumeMl, today));
+    setDay((prevDay) =>
+      applyOptimisticAmount(prevDay, "water", container.volumeMl, today),
+    );
     setGoalPending("water", true);
-    setError(null);
-    setSessionExpired(false);
-    setRetryAction(null);
+    clearGoalError("water");
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -596,41 +608,39 @@ export function DayTracker({
           }),
         },
       );
-      setDay(result.day);
+      setDay((prevDay) =>
+        withGoalState(prevDay, "water", result.day.goals.water, today),
+      );
       setAchievementToast(result.newAchievements?.[0] ?? null);
       refreshRelatedData();
     } catch (requestError) {
-      setDay(previous);
-      setError(apiErrorMessage(requestError));
-      setSessionExpired(
-        requestError instanceof DayApiError && requestError.status === 401,
+      setDay((prevDay) =>
+        withGoalState(prevDay, "water", previousGoalProgress, today),
       );
-      setRetryAction(action);
+      setGoalError("water", {
+        message: apiErrorMessage(requestError),
+        sessionExpired:
+          requestError instanceof DayApiError && requestError.status === 401,
+        retry: () => void addContainer(container, operation.operationId),
+      });
     } finally {
       setGoalPending("water", false);
     }
   }
 
   async function toggleDiet(retryOperationId?: string) {
-    if (dayMutationPending) {
+    if (isPending("diet")) {
       return;
     }
     if (!day.editable) {
-      setError("This day is view-only.");
       return;
     }
 
-    const previous = day;
+    const previousGoalProgress = day.goals.diet;
     const operation = withOperationId(retryOperationId);
-    const action: RetryAction = {
-      kind: "diet",
-      operationId: operation.operationId,
-    };
-    setDay(applyOptimisticDiet(day, today));
+    setDay((prevDay) => applyOptimisticDiet(prevDay, today));
     setGoalPending("diet", true);
-    setError(null);
-    setSessionExpired(false);
-    setRetryAction(null);
+    clearGoalError("diet");
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -643,69 +653,23 @@ export function DayTracker({
           }),
         },
       );
-      setDay(result.day);
+      setDay((prevDay) =>
+        withGoalState(prevDay, "diet", result.day.goals.diet, today),
+      );
       setAchievementToast(result.newAchievements?.[0] ?? null);
       refreshRelatedData();
     } catch (requestError) {
-      setDay(previous);
-      setError(apiErrorMessage(requestError));
-      setSessionExpired(
-        requestError instanceof DayApiError && requestError.status === 401,
+      setDay((prevDay) =>
+        withGoalState(prevDay, "diet", previousGoalProgress, today),
       );
-      setRetryAction(action);
+      setGoalError("diet", {
+        message: apiErrorMessage(requestError),
+        sessionExpired:
+          requestError instanceof DayApiError && requestError.status === 401,
+        retry: () => void toggleDiet(operation.operationId),
+      });
     } finally {
       setGoalPending("diet", false);
-    }
-  }
-
-  async function toggleAmountGoalDone(
-    goal: AmountGoal,
-    retryOperationId?: string,
-  ) {
-    if (dayMutationPending) {
-      return;
-    }
-    if (!day.editable) {
-      setError("This day is view-only.");
-      return;
-    }
-
-    const previous = day;
-    const operation = withOperationId(retryOperationId);
-    const action: RetryAction = {
-      goal,
-      kind: "goalDone",
-      operationId: operation.operationId,
-    };
-    setDay(applyOptimisticAmountGoalDone(day, goal, today));
-    setGoalPending(goal, true);
-    setError(null);
-    setSessionExpired(false);
-    setRetryAction(null);
-
-    try {
-      const result = await requestDayApi<DayMutationResponse>(
-        `/api/day/${day.localDate}/goals/${goal}/toggle-done`,
-        {
-          method: "POST",
-          headers: operation.headers,
-          body: JSON.stringify({
-            clientOperationId: operation.operationId,
-          }),
-        },
-      );
-      setDay(result.day);
-      setAchievementToast(result.newAchievements?.[0] ?? null);
-      refreshRelatedData();
-    } catch (requestError) {
-      setDay(previous);
-      setError(apiErrorMessage(requestError));
-      setSessionExpired(
-        requestError instanceof DayApiError && requestError.status === 401,
-      );
-      setRetryAction(action);
-    } finally {
-      setGoalPending(goal, false);
     }
   }
 
@@ -731,11 +695,10 @@ export function DayTracker({
    * "previous amount" to restore to.
    */
   function toggleAmountFill(goal: AmountGoal) {
-    if (dayMutationPending) {
+    if (isPending(goal)) {
       return;
     }
     if (!day.editable) {
-      setError("This day is view-only.");
       return;
     }
 
@@ -772,34 +735,6 @@ export function DayTracker({
     );
   }
 
-  function retryFailedAction() {
-    if (!retryAction) {
-      return;
-    }
-
-    if (retryAction.kind === "amount") {
-      void addAmount(
-        retryAction.goal,
-        retryAction.amount,
-        retryAction.unit,
-        retryAction.operationId,
-      );
-      return;
-    }
-
-    if (retryAction.kind === "container") {
-      void addContainer(retryAction.container, retryAction.operationId);
-      return;
-    }
-
-    if (retryAction.kind === "goalDone") {
-      void toggleAmountGoalDone(retryAction.goal, retryAction.operationId);
-      return;
-    }
-
-    void toggleDiet(retryAction.operationId);
-  }
-
   return (
     <div className="space-y-4 py-6">
       <Card>
@@ -834,54 +769,34 @@ export function DayTracker({
             This day was invalidated by an administrator.
           </p>
         ) : null}
-        {error ? (
-          <div
-            aria-live="assertive"
-            className="mt-4 flex flex-wrap items-center gap-3 text-sm text-red-700"
-            role="alert"
-          >
-            <p>{error}</p>
-            {retryAction ? (
-              <Button
-                disabled={dayMutationPending}
-                onClick={retryFailedAction}
-                variant="secondary"
-              >
-                Retry
-              </Button>
-            ) : null}
-            {sessionExpired ? (
-              <Link
-                className="font-semibold underline underline-offset-2"
-                href="/login"
-              >
-                Sign in again
-              </Link>
-            ) : null}
-          </div>
-        ) : null}
       </Card>
 
       {useSliders ? (
         <SliderControl
+          error={goalErrors.workout?.message}
           goal="workout"
+          onRetry={goalErrors.workout?.retry}
           onSetAmount={(next) => setAmountTo("workout", next, "minutes")}
           onToggleDone={() => toggleAmountFill("workout")}
-          pending={dayMutationPending || !day.editable}
+          pending={isPending("workout") || !day.editable}
           progress={day.goals.workout}
+          sessionExpired={goalErrors.workout?.sessionExpired}
           title="Workout"
           toggleLocked={isAmountToggleLocked("workout")}
           unitLabel="min"
         />
       ) : (
         <ProgressControl
+          error={goalErrors.workout?.message}
           inputLabel="Workout minutes to add or remove"
           inputPlaceholder="Minutes"
           onAdd={(amount) => void addAmount("workout", amount, "minutes")}
+          onRetry={goalErrors.workout?.retry}
           onToggleDone={() => toggleAmountFill("workout")}
-          pending={dayMutationPending || !day.editable}
+          pending={isPending("workout") || !day.editable}
           progress={day.goals.workout}
           quickAmounts={[15, 30, 45]}
+          sessionExpired={goalErrors.workout?.sessionExpired}
           title="Workout"
           toggleLocked={isAmountToggleLocked("workout")}
           unitLabel="min"
@@ -890,27 +805,33 @@ export function DayTracker({
 
       {useSliders ? (
         <SliderControl
+          error={goalErrors.water?.message}
           goal="water"
+          onRetry={goalErrors.water?.retry}
           onSetAmount={(next) => setAmountTo("water", next, "ml")}
           onToggleDone={() => toggleAmountFill("water")}
-          pending={dayMutationPending || !day.editable}
+          pending={isPending("water") || !day.editable}
           progress={day.goals.water}
+          sessionExpired={goalErrors.water?.sessionExpired}
           title="Water"
           toggleLocked={isAmountToggleLocked("water")}
           unitLabel="ml"
         />
       ) : (
         <GoalControl
+          error={goalErrors.water?.message}
+          onRetry={goalErrors.water?.retry}
           onToggleDone={() => toggleAmountFill("water")}
-          pending={dayMutationPending || !day.editable}
+          pending={isPending("water") || !day.editable}
           progress={day.goals.water}
+          sessionExpired={goalErrors.water?.sessionExpired}
           title="Water"
           toggleLocked={isAmountToggleLocked("water")}
           titleAction={
             <Button
               aria-label="Manage water containers"
               className="min-h-0 px-2 py-1 text-xs"
-              disabled={dayMutationPending}
+              disabled={isPending("water")}
               onClick={() => setContainersOpen(true)}
               variant="ghost"
             >
@@ -922,7 +843,7 @@ export function DayTracker({
             amount={250}
             label="Water"
             onAdjust={(amount) => void addAmount("water", amount, "ml")}
-            pending={dayMutationPending || !day.editable}
+            pending={isPending("water") || !day.editable}
             unitLabel="ml"
           />
           {containers.map((container) => (
@@ -933,37 +854,43 @@ export function DayTracker({
               onRemoveContainer={() =>
                 void addAmount("water", -container.volumeMl, "ml")
               }
-              pending={dayMutationPending || !day.editable}
+              pending={isPending("water") || !day.editable}
             />
           ))}
           <CustomWaterAmountForm
             id="water-custom-amount"
             onAdd={(amount, unit) => void addAmount("water", amount, unit)}
-            pending={dayMutationPending || !day.editable}
+            pending={isPending("water") || !day.editable}
           />
         </GoalControl>
       )}
 
       {useSliders ? (
         <SliderControl
+          error={goalErrors.reading?.message}
           goal="reading"
+          onRetry={goalErrors.reading?.retry}
           onSetAmount={(next) => setAmountTo("reading", next, "pages")}
           onToggleDone={() => toggleAmountFill("reading")}
-          pending={dayMutationPending || !day.editable}
+          pending={isPending("reading") || !day.editable}
           progress={day.goals.reading}
+          sessionExpired={goalErrors.reading?.sessionExpired}
           title="Reading"
           toggleLocked={isAmountToggleLocked("reading")}
           unitLabel="pages"
         />
       ) : (
         <ProgressControl
+          error={goalErrors.reading?.message}
           inputLabel="Reading pages to add or remove"
           inputPlaceholder="Pages"
           onAdd={(amount) => void addAmount("reading", amount, "pages")}
+          onRetry={goalErrors.reading?.retry}
           onToggleDone={() => toggleAmountFill("reading")}
-          pending={dayMutationPending || !day.editable}
+          pending={isPending("reading") || !day.editable}
           progress={day.goals.reading}
           quickAmounts={[5, 10]}
+          sessionExpired={goalErrors.reading?.sessionExpired}
           title="Reading"
           toggleLocked={isAmountToggleLocked("reading")}
           unitLabel="pages"
@@ -971,9 +898,12 @@ export function DayTracker({
       )}
 
       <GoalControl
+        error={goalErrors.diet?.message}
+        onRetry={goalErrors.diet?.retry}
         onToggleDone={() => void toggleDiet()}
-        pending={dayMutationPending || !day.editable}
+        pending={isPending("diet") || !day.editable}
         progress={day.goals.diet}
+        sessionExpired={goalErrors.diet?.sessionExpired}
         title="Ate well & drank only socially"
       />
 
@@ -989,7 +919,6 @@ export function DayTracker({
         <ContainerManager
           containers={containers}
           onContainersChange={setContainers}
-          onError={setError}
         />
       </Sheet>
 
