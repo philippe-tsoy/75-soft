@@ -74,6 +74,13 @@ a {
   background: transparent;
   cursor: grab;
   touch-action: pan-y;
+  opacity: 1;
+  /*
+   * A goal's controls disable for the round trip after a commit (a few
+   * hundred ms). Without a transition that read as an instant grey flash;
+   * fading it keeps the disabled cue without looking like a glitch.
+   */
+  transition: opacity 200ms ease;
 }
 
 .amount-slider:active {
@@ -82,7 +89,7 @@ a {
 
 .amount-slider:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.75;
 }
 
 .amount-slider::-webkit-slider-runnable-track {

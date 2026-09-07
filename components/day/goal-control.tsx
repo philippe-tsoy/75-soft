@@ -92,11 +92,16 @@ export function GoalControl({
           }
           aria-pressed={progress.met}
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 opacity-100 transition-[opacity,background-color,color] duration-200 outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
             progress.met
               ? "border-primary bg-primary text-primary-foreground focus-visible:ring-primary"
               : "border-border bg-card text-muted focus-visible:ring-primary",
-            toggleDisabled ? "cursor-default" : "hover:bg-surface-accent",
+            // Explicit disabled opacity, animated: without it the browser's
+            // own (unanimated) disabled styling reads as an instant flash
+            // during the brief round trip after a commit.
+            toggleDisabled
+              ? "cursor-default opacity-70"
+              : "hover:bg-surface-accent",
           )}
           disabled={toggleDisabled}
           onClick={onToggleDone}
