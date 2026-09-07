@@ -10,8 +10,17 @@ interface GoalControlProps {
   pending: boolean;
   children?: ReactNode;
   titleAction?: ReactNode;
-  /** Omitted for read-only cards; otherwise flips the manual done flag. */
+  /** Omitted for read-only cards; otherwise flips or acts on the checkmark. */
   onToggleDone?: () => void;
+  /**
+   * Overrides the default "locked once amount >= target" rule. The caller
+   * knows whether the goal reached its target through a reversible action
+   * (e.g. the checkmark's own fill) or an irreversible one (dragging the
+   * slider itself), which this component has no way to tell apart on its
+   * own. Omit to fall back to the amount-based rule (used by the diet
+   * card, which has no amount/target at all).
+   */
+  toggleLocked?: boolean;
 }
 
 function formatAmount(value: number, unit: string | null | undefined): string {
@@ -48,6 +57,7 @@ export function GoalControl({
   children,
   titleAction,
   onToggleDone,
+  toggleLocked,
 }: GoalControlProps) {
   const amount =
     progress.amount !== undefined && progress.target !== undefined
@@ -58,15 +68,16 @@ export function GoalControl({
 
   /*
    * `met` is `amount >= target or markedDone`, so once the logged amount
-   * reaches the target the checkmark is already on and cannot be turned off
-   * without lowering the amount. Below the target it is a free-standing
-   * boolean the member can toggle either way.
+   * reaches the target the checkmark is already on. The caller can override
+   * this default lock (see `toggleLocked` doc) when it reached the target
+   * through a reversible action of its own.
    */
   const lockedByAmount =
     progress.amount !== undefined &&
     progress.target !== undefined &&
     progress.amount >= progress.target;
-  const toggleDisabled = pending || lockedByAmount || !onToggleDone;
+  const effectiveLocked = toggleLocked ?? lockedByAmount;
+  const toggleDisabled = pending || effectiveLocked || !onToggleDone;
 
   return (
     <Card
@@ -84,7 +95,7 @@ export function GoalControl({
         </div>
         <button
           aria-label={
-            lockedByAmount
+            effectiveLocked
               ? `${title} met, the logged amount reached the target`
               : progress.met
                 ? `Mark ${title} not done`
@@ -106,7 +117,7 @@ export function GoalControl({
           disabled={toggleDisabled}
           onClick={onToggleDone}
           title={
-            lockedByAmount
+            effectiveLocked
               ? "Met automatically because the logged amount reached the target"
               : undefined
           }

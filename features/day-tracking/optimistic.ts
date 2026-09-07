@@ -44,6 +44,34 @@ export function amountDeltaTo(
   return Math.round(nextValue) - currentAmount;
 }
 
+export type AmountFillResolution =
+  | { action: "fill"; nextValue: number }
+  | { action: "revert"; nextValue: number }
+  | { action: "locked" };
+
+/**
+ * Decides what the checkmark's fill/undo shortcut does for an amount goal.
+ * Below the target it fills to the target and hands back the amount to
+ * remember; at or above the target it either reverts to a remembered
+ * amount (the fill's own undo) or is locked (the target was reached by
+ * dragging the slider itself, which has no "previous amount" to restore).
+ */
+export function resolveAmountFill(
+  amount: number,
+  target: number,
+  previousAmount: number | undefined,
+): AmountFillResolution {
+  if (amount < target) {
+    return { action: "fill", nextValue: target };
+  }
+
+  if (previousAmount === undefined) {
+    return { action: "locked" };
+  }
+
+  return { action: "revert", nextValue: previousAmount };
+}
+
 export function applyOptimisticAmount(
   day: DayRollupDTO,
   goal: AmountGoal,

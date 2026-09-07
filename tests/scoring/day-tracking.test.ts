@@ -8,6 +8,7 @@ import {
   createDayTrackingMutationService,
   mapDayRollupRow,
   mapDailyBoardScoreRow,
+  resolveAmountFill,
 } from "@/features/day-tracking";
 import type {
   DayRollupRow,
@@ -196,6 +197,30 @@ describe("W2 optimistic controls", () => {
 
     expect(backToZero.goals.water).toMatchObject({ amount: 0, met: false });
     expect(backToZero.metCount).toBe(0);
+  });
+
+  it("resolves the checkmark's fill/undo shortcut for an amount goal", () => {
+    // Below target: fills to the target and remembers the prior amount.
+    expect(resolveAmountFill(30, 45, undefined)).toEqual({
+      action: "fill",
+      nextValue: 45,
+    });
+
+    // At target with a remembered amount: undoes back to it.
+    expect(resolveAmountFill(45, 45, 30)).toEqual({
+      action: "revert",
+      nextValue: 30,
+    });
+
+    // At target with nothing remembered: reached it by dragging the
+    // slider itself, so there is no "previous amount" to restore.
+    expect(resolveAmountFill(45, 45, undefined)).toEqual({ action: "locked" });
+
+    // Past target (e.g. logged with the steppers) behaves like at-target.
+    expect(resolveAmountFill(60, 45, 30)).toEqual({
+      action: "revert",
+      nextValue: 30,
+    });
   });
 
   it("toggles a manual done flag independently of the amount", () => {

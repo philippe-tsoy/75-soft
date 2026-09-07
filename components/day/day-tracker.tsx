@@ -18,6 +18,7 @@ import {
   applyOptimisticAmount,
   applyOptimisticAmountGoalDone,
   applyOptimisticDiet,
+  resolveAmountFill,
 } from "@/features/day-tracking/optimistic";
 import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
 import type {
@@ -55,6 +56,13 @@ const FALLBACK_TARGETS: Record<AmountGoal, number> = {
   reading: 10,
   water: 2_000,
   workout: 45,
+};
+
+/** Unit each amount goal's ledger entries are logged in. */
+const AMOUNT_UNITS: Record<AmountGoal, AmountUnit> = {
+  reading: "pages",
+  water: "ml",
+  workout: "minutes",
 };
 
 type AmountGoal = "workout" | "water" | "reading";
@@ -354,6 +362,7 @@ function ProgressControl({
   pending,
   onAdd,
   onToggleDone,
+  toggleLocked,
   quickAmounts,
   unitLabel,
   inputLabel,
@@ -364,6 +373,7 @@ function ProgressControl({
   pending: boolean;
   onAdd: (amount: number) => void;
   onToggleDone: () => void;
+  toggleLocked: boolean;
   quickAmounts: number[];
   unitLabel: string;
   inputLabel: string;
@@ -375,6 +385,7 @@ function ProgressControl({
       pending={pending}
       progress={progress}
       title={title}
+      toggleLocked={toggleLocked}
     >
       {quickAmounts.map((amount) => (
         <AmountStepper
@@ -405,6 +416,7 @@ function SliderControl({
   unitLabel,
   onSetAmount,
   onToggleDone,
+  toggleLocked,
 }: {
   title: string;
   goal: AmountGoal;
@@ -413,6 +425,7 @@ function SliderControl({
   unitLabel: string;
   onSetAmount: (nextValue: number) => void;
   onToggleDone: () => void;
+  toggleLocked: boolean;
 }) {
   return (
     <GoalControl
@@ -420,6 +433,7 @@ function SliderControl({
       pending={pending}
       progress={progress}
       title={title}
+      toggleLocked={toggleLocked}
     >
       <AmountSlider
         disabled={pending}
@@ -452,6 +466,9 @@ export function DayTracker({
   const [containersOpen, setContainersOpen] = useState(false);
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
+  const [preFillAmount, setPreFillAmount] = useState<
+    Partial<Record<AmountGoal, number>>
+  >({});
   const dayMutationPending = Object.values(pending).some(Boolean);
   const useSliders = amountInputMode === "slider";
 
@@ -705,6 +722,56 @@ export function DayTracker({
     void addAmount(goal, delta, unit);
   }
 
+  /**
+   * The checkmark on an amount goal is a fill/undo shortcut, not an
+   * independent flag: checking it fills the amount to the target, and
+   * checking it again restores whatever amount was logged right before
+   * that fill. Reaching the target by dragging the slider itself still
+   * locks the checkmark (see isAmountToggleLocked) since there is no
+   * "previous amount" to restore to.
+   */
+  function toggleAmountFill(goal: AmountGoal) {
+    if (dayMutationPending) {
+      return;
+    }
+    if (!day.editable) {
+      setError("This day is view-only.");
+      return;
+    }
+
+    const progress = day.goals[goal];
+    const target = progress.target ?? FALLBACK_TARGETS[goal];
+    const amount = progress.amount ?? 0;
+    const unit = AMOUNT_UNITS[goal];
+    const resolution = resolveAmountFill(amount, target, preFillAmount[goal]);
+
+    if (resolution.action === "locked") {
+      return;
+    }
+
+    setPreFillAmount((current) => {
+      const next = { ...current };
+      if (resolution.action === "fill") {
+        next[goal] = amount;
+      } else {
+        delete next[goal];
+      }
+      return next;
+    });
+    setAmountTo(goal, resolution.nextValue, unit);
+  }
+
+  function isAmountToggleLocked(goal: AmountGoal): boolean {
+    const progress = day.goals[goal];
+    if (progress.amount === undefined || progress.target === undefined) {
+      return false;
+    }
+
+    return (
+      progress.amount >= progress.target && preFillAmount[goal] === undefined
+    );
+  }
+
   function retryFailedAction() {
     if (!retryAction) {
       return;
@@ -799,10 +866,11 @@ export function DayTracker({
         <SliderControl
           goal="workout"
           onSetAmount={(next) => setAmountTo("workout", next, "minutes")}
-          onToggleDone={() => void toggleAmountGoalDone("workout")}
+          onToggleDone={() => toggleAmountFill("workout")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.workout}
           title="Workout"
+          toggleLocked={isAmountToggleLocked("workout")}
           unitLabel="min"
         />
       ) : (
@@ -810,11 +878,12 @@ export function DayTracker({
           inputLabel="Workout minutes to add or remove"
           inputPlaceholder="Minutes"
           onAdd={(amount) => void addAmount("workout", amount, "minutes")}
-          onToggleDone={() => void toggleAmountGoalDone("workout")}
+          onToggleDone={() => toggleAmountFill("workout")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.workout}
           quickAmounts={[15, 30, 45]}
           title="Workout"
+          toggleLocked={isAmountToggleLocked("workout")}
           unitLabel="min"
         />
       )}
@@ -823,18 +892,20 @@ export function DayTracker({
         <SliderControl
           goal="water"
           onSetAmount={(next) => setAmountTo("water", next, "ml")}
-          onToggleDone={() => void toggleAmountGoalDone("water")}
+          onToggleDone={() => toggleAmountFill("water")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.water}
           title="Water"
+          toggleLocked={isAmountToggleLocked("water")}
           unitLabel="ml"
         />
       ) : (
         <GoalControl
-          onToggleDone={() => void toggleAmountGoalDone("water")}
+          onToggleDone={() => toggleAmountFill("water")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.water}
           title="Water"
+          toggleLocked={isAmountToggleLocked("water")}
           titleAction={
             <Button
               aria-label="Manage water containers"
@@ -877,10 +948,11 @@ export function DayTracker({
         <SliderControl
           goal="reading"
           onSetAmount={(next) => setAmountTo("reading", next, "pages")}
-          onToggleDone={() => void toggleAmountGoalDone("reading")}
+          onToggleDone={() => toggleAmountFill("reading")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.reading}
           title="Reading"
+          toggleLocked={isAmountToggleLocked("reading")}
           unitLabel="pages"
         />
       ) : (
@@ -888,11 +960,12 @@ export function DayTracker({
           inputLabel="Reading pages to add or remove"
           inputPlaceholder="Pages"
           onAdd={(amount) => void addAmount("reading", amount, "pages")}
-          onToggleDone={() => void toggleAmountGoalDone("reading")}
+          onToggleDone={() => toggleAmountFill("reading")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.reading}
           quickAmounts={[5, 10]}
           title="Reading"
+          toggleLocked={isAmountToggleLocked("reading")}
           unitLabel="pages"
         />
       )}
@@ -924,10 +997,11 @@ export function DayTracker({
         {useSliders
           ? "Drag a slider to set the total logged for that challenge; releasing it saves, and totals never drop below zero."
           : "Use − and + to log or correct workout, water, and reading amounts; corrections never drop a total below zero."}{" "}
-        The checkmark on each card is a separate boolean that counts the
-        challenge complete regardless of the amount. It locks on once the amount
-        reaches the target. Switch between sliders and buttons on the Me screen;
-        every action can be safely retried.
+        The checkmark on Workout, Water, and Reading fills the amount to the
+        target; tapping it again restores whatever amount was logged before.
+        Reaching the target by dragging the slider itself locks the checkmark
+        until you move the amount back down. Switch between sliders and buttons
+        on the Me screen; every action can be safely retried.
       </p>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}

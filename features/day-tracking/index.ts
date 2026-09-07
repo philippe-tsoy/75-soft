@@ -23,6 +23,8 @@ export {
   applyOptimisticAmount,
   applyOptimisticDiet,
   applyOptimisticAmountGoalDone,
+  resolveAmountFill,
+  type AmountFillResolution,
 } from "./optimistic";
 export {
   createDayTrackingReadService,
