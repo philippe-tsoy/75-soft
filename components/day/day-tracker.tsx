@@ -73,13 +73,6 @@ function formatStatus(status: DayRollupDTO["status"]): string {
   return status.replace("_", " ");
 }
 
-function formatWaterVolume(volumeMl: number): string {
-  const liters = volumeMl / 1_000;
-  return Number.isInteger(liters)
-    ? `${liters} L`
-    : `${volumeMl.toLocaleString()} ml`;
-}
-
 function apiErrorMessage(error: unknown): string {
   if (error instanceof DayApiError && error.status === 401) {
     return "Your session expired. Sign in again to save changes.";
@@ -310,6 +303,44 @@ function AmountStepper({
         aria-label={`Add ${amount} ${unitLabel} to ${label}`}
         disabled={pending}
         onClick={() => onAdjust(amount)}
+        variant="secondary"
+      >
+        +
+      </Button>
+    </div>
+  );
+}
+
+function ContainerStepper({
+  container,
+  pending,
+  onAddContainer,
+  onRemoveContainer,
+}: {
+  container: ContainerDTO;
+  pending: boolean;
+  onAddContainer: () => void;
+  onRemoveContainer: () => void;
+}) {
+  const isPendingCreate = container.id.startsWith("pending-");
+
+  return (
+    <div className="border-border inline-flex items-center gap-1 rounded-xl border p-1">
+      <Button
+        aria-label={`Remove ${container.label} (${container.volumeMl} ml) from Water`}
+        disabled={pending || isPendingCreate}
+        onClick={onRemoveContainer}
+        variant="secondary"
+      >
+        −
+      </Button>
+      <span className="min-w-[6rem] text-center text-sm font-semibold">
+        {container.label} · {container.volumeMl} ml
+      </span>
+      <Button
+        aria-label={`Add ${container.label} (${container.volumeMl} ml) to Water`}
+        disabled={pending || isPendingCreate}
+        onClick={onAddContainer}
         variant="secondary"
       >
         +
@@ -729,19 +760,23 @@ export function DayTracker({
         pending={dayMutationPending || !day.editable}
         progress={day.goals.water}
         title="Water"
+        titleAction={
+          <Button
+            aria-label="Manage water containers"
+            className="min-h-0 px-2 py-1 text-xs"
+            disabled={dayMutationPending}
+            onClick={() => setContainersOpen(true)}
+            variant="ghost"
+          >
+            Containers
+          </Button>
+        }
       >
         <MarkDoneButton
           onToggleDone={() => void toggleAmountGoalDone("water")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.water}
         />
-        <Button
-          disabled={dayMutationPending}
-          onClick={() => setContainersOpen(true)}
-          variant="secondary"
-        >
-          Add water container
-        </Button>
         <AmountStepper
           amount={250}
           label="Water"
@@ -749,6 +784,17 @@ export function DayTracker({
           pending={dayMutationPending || !day.editable}
           unitLabel="ml"
         />
+        {containers.map((container) => (
+          <ContainerStepper
+            container={container}
+            key={container.id}
+            onAddContainer={() => void addContainer(container)}
+            onRemoveContainer={() =>
+              void addAmount("water", -container.volumeMl, "ml")
+            }
+            pending={dayMutationPending || !day.editable}
+          />
+        ))}
         <CustomWaterAmountForm
           id="water-custom-amount"
           onAdd={(amount, unit) => void addAmount("water", amount, unit)}
@@ -787,46 +833,15 @@ export function DayTracker({
         open={containersOpen}
         title="Water containers"
       >
-        <div className="space-y-4">
-          <section aria-labelledby="water-container-picker-title">
-            <h3
-              className="text-foreground mb-2 text-sm font-semibold"
-              id="water-container-picker-title"
-            >
-              Add a container
-            </h3>
-            {containers.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {containers.map((container) => (
-                  <Button
-                    disabled={
-                      dayMutationPending ||
-                      !day.editable ||
-                      container.id.startsWith("pending-")
-                    }
-                    key={container.id}
-                    onClick={() => {
-                      setContainersOpen(false);
-                      void addContainer(container);
-                    }}
-                    variant="secondary"
-                  >
-                    +{formatWaterVolume(container.volumeMl)} {container.label}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted rounded-xl border border-dashed p-3 text-sm">
-                No saved containers yet. Add one below.
-              </p>
-            )}
-          </section>
-          <ContainerManager
-            containers={containers}
-            onContainersChange={setContainers}
-            onError={setError}
-          />
-        </div>
+        <p className="text-muted mb-4 text-sm">
+          Manage your saved containers here. Each one shows up as its own −
+          / + stepper on the Water card.
+        </p>
+        <ContainerManager
+          containers={containers}
+          onContainersChange={setContainers}
+          onError={setError}
+        />
       </Sheet>
 
       <p className="text-muted px-1 text-xs">

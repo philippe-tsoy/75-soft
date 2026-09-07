@@ -8,6 +8,7 @@ interface GoalControlProps {
   progress: GoalProgressDTO;
   pending: boolean;
   children: ReactNode;
+  titleAction?: ReactNode;
 }
 
 function formatAmount(value: number, unit: string | null | undefined): string {
@@ -24,6 +25,7 @@ export function GoalControl({
   progress,
   pending,
   children,
+  titleAction,
 }: GoalControlProps) {
   const amount =
     progress.amount !== undefined && progress.target !== undefined
@@ -40,7 +42,10 @@ export function GoalControl({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">{title}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold">{title}</h2>
+            {titleAction}
+          </div>
           <p className="text-muted mt-1 text-sm">{amount}</p>
         </div>
         <span
