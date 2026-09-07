@@ -14,6 +14,7 @@ import {
   withOperationId,
 } from "@/features/day-tracking/client";
 import {
+  amountDeltaTo,
   applyOptimisticAmount,
   applyOptimisticAmountGoalDone,
   applyOptimisticDiet,
@@ -21,12 +22,14 @@ import {
 import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
 import type {
   AchievementDTO,
+  AmountInputMode,
   ContainerDTO,
   DayRollupDTO,
   GoalProgressDTO,
 } from "@/lib/types";
 import { normalizeWaterAmount } from "@/lib/validation";
 
+import { AmountSlider } from "./amount-slider";
 import { ContainerManager } from "./container-manager";
 import { GoalControl } from "./goal-control";
 
@@ -35,7 +38,24 @@ export interface DayTrackerProps {
   initialContainers: ContainerDTO[];
   userId: string;
   today: string;
+  amountInputMode: AmountInputMode;
 }
+
+/**
+ * Slider granularity per goal. The right end of every track is the goal's
+ * own target, so these only control how finely the thumb snaps.
+ */
+const SLIDER_STEPS: Record<AmountGoal, number> = {
+  reading: 1,
+  water: 50,
+  workout: 1,
+};
+
+const FALLBACK_TARGETS: Record<AmountGoal, number> = {
+  reading: 10,
+  water: 2_000,
+  workout: 45,
+};
 
 type AmountGoal = "workout" | "water" | "reading";
 
@@ -252,27 +272,6 @@ function CustomWaterAmountForm({
   );
 }
 
-function MarkDoneButton({
-  pending,
-  progress,
-  onToggleDone,
-}: {
-  pending: boolean;
-  progress: GoalProgressDTO;
-  onToggleDone: () => void;
-}) {
-  return (
-    <Button
-      aria-pressed={progress.markedDone}
-      disabled={pending}
-      onClick={onToggleDone}
-      variant={progress.markedDone ? "secondary" : "primary"}
-    >
-      {progress.markedDone ? "Done ✓ (undo)" : "Mark done"}
-    </Button>
-  );
-}
-
 function AmountStepper({
   amount,
   unitLabel,
@@ -371,12 +370,12 @@ function ProgressControl({
   inputPlaceholder: string;
 }) {
   return (
-    <GoalControl pending={pending} progress={progress} title={title}>
-      <MarkDoneButton
-        onToggleDone={onToggleDone}
-        pending={pending}
-        progress={progress}
-      />
+    <GoalControl
+      onToggleDone={onToggleDone}
+      pending={pending}
+      progress={progress}
+      title={title}
+    >
       {quickAmounts.map((amount) => (
         <AmountStepper
           amount={amount}
@@ -398,11 +397,49 @@ function ProgressControl({
   );
 }
 
+function SliderControl({
+  title,
+  goal,
+  progress,
+  pending,
+  unitLabel,
+  onSetAmount,
+  onToggleDone,
+}: {
+  title: string;
+  goal: AmountGoal;
+  progress: GoalProgressDTO;
+  pending: boolean;
+  unitLabel: string;
+  onSetAmount: (nextValue: number) => void;
+  onToggleDone: () => void;
+}) {
+  return (
+    <GoalControl
+      onToggleDone={onToggleDone}
+      pending={pending}
+      progress={progress}
+      title={title}
+    >
+      <AmountSlider
+        disabled={pending}
+        label={title}
+        onCommit={onSetAmount}
+        step={SLIDER_STEPS[goal]}
+        target={progress.target ?? FALLBACK_TARGETS[goal]}
+        unitLabel={unitLabel}
+        value={progress.amount ?? 0}
+      />
+    </GoalControl>
+  );
+}
+
 export function DayTracker({
   initialDay,
   initialContainers,
   userId,
   today,
+  amountInputMode,
 }: DayTrackerProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -416,6 +453,7 @@ export function DayTracker({
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
   const dayMutationPending = Object.values(pending).some(Boolean);
+  const useSliders = amountInputMode === "slider";
 
   function refreshRelatedData() {
     invalidateDayTracking(queryClient, userId, day.localDate);
@@ -654,6 +692,19 @@ export function DayTracker({
     }
   }
 
+  /**
+   * The slider picks an absolute total; the ledger only accepts signed
+   * deltas, so translate before hitting the same endpoint the steppers use.
+   */
+  function setAmountTo(goal: AmountGoal, nextValue: number, unit: AmountUnit) {
+    const delta = amountDeltaTo(day.goals[goal].amount ?? 0, nextValue);
+    if (delta === 0) {
+      return;
+    }
+
+    void addAmount(goal, delta, unit);
+  }
+
   function retryFailedAction() {
     if (!retryAction) {
       return;
@@ -744,89 +795,114 @@ export function DayTracker({
         ) : null}
       </Card>
 
-      <ProgressControl
-        inputLabel="Workout minutes to add or remove"
-        inputPlaceholder="Minutes"
-        onAdd={(amount) => void addAmount("workout", amount, "minutes")}
-        onToggleDone={() => void toggleAmountGoalDone("workout")}
-        pending={dayMutationPending || !day.editable}
-        progress={day.goals.workout}
-        quickAmounts={[15, 30, 45]}
-        title="Workout"
-        unitLabel="min"
-      />
+      {useSliders ? (
+        <SliderControl
+          goal="workout"
+          onSetAmount={(next) => setAmountTo("workout", next, "minutes")}
+          onToggleDone={() => void toggleAmountGoalDone("workout")}
+          pending={dayMutationPending || !day.editable}
+          progress={day.goals.workout}
+          title="Workout"
+          unitLabel="min"
+        />
+      ) : (
+        <ProgressControl
+          inputLabel="Workout minutes to add or remove"
+          inputPlaceholder="Minutes"
+          onAdd={(amount) => void addAmount("workout", amount, "minutes")}
+          onToggleDone={() => void toggleAmountGoalDone("workout")}
+          pending={dayMutationPending || !day.editable}
+          progress={day.goals.workout}
+          quickAmounts={[15, 30, 45]}
+          title="Workout"
+          unitLabel="min"
+        />
+      )}
 
-      <GoalControl
-        pending={dayMutationPending || !day.editable}
-        progress={day.goals.water}
-        title="Water"
-        titleAction={
-          <Button
-            aria-label="Manage water containers"
-            className="min-h-0 px-2 py-1 text-xs"
-            disabled={dayMutationPending}
-            onClick={() => setContainersOpen(true)}
-            variant="ghost"
-          >
-            Containers
-          </Button>
-        }
-      >
-        <MarkDoneButton
+      {useSliders ? (
+        <SliderControl
+          goal="water"
+          onSetAmount={(next) => setAmountTo("water", next, "ml")}
           onToggleDone={() => void toggleAmountGoalDone("water")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.water}
-        />
-        <AmountStepper
-          amount={250}
-          label="Water"
-          onAdjust={(amount) => void addAmount("water", amount, "ml")}
-          pending={dayMutationPending || !day.editable}
+          title="Water"
           unitLabel="ml"
         />
-        {containers.map((container) => (
-          <ContainerStepper
-            container={container}
-            key={container.id}
-            onAddContainer={() => void addContainer(container)}
-            onRemoveContainer={() =>
-              void addAmount("water", -container.volumeMl, "ml")
-            }
+      ) : (
+        <GoalControl
+          onToggleDone={() => void toggleAmountGoalDone("water")}
+          pending={dayMutationPending || !day.editable}
+          progress={day.goals.water}
+          title="Water"
+          titleAction={
+            <Button
+              aria-label="Manage water containers"
+              className="min-h-0 px-2 py-1 text-xs"
+              disabled={dayMutationPending}
+              onClick={() => setContainersOpen(true)}
+              variant="ghost"
+            >
+              Containers
+            </Button>
+          }
+        >
+          <AmountStepper
+            amount={250}
+            label="Water"
+            onAdjust={(amount) => void addAmount("water", amount, "ml")}
+            pending={dayMutationPending || !day.editable}
+            unitLabel="ml"
+          />
+          {containers.map((container) => (
+            <ContainerStepper
+              container={container}
+              key={container.id}
+              onAddContainer={() => void addContainer(container)}
+              onRemoveContainer={() =>
+                void addAmount("water", -container.volumeMl, "ml")
+              }
+              pending={dayMutationPending || !day.editable}
+            />
+          ))}
+          <CustomWaterAmountForm
+            id="water-custom-amount"
+            onAdd={(amount, unit) => void addAmount("water", amount, unit)}
             pending={dayMutationPending || !day.editable}
           />
-        ))}
-        <CustomWaterAmountForm
-          id="water-custom-amount"
-          onAdd={(amount, unit) => void addAmount("water", amount, unit)}
-          pending={dayMutationPending || !day.editable}
-        />
-      </GoalControl>
+        </GoalControl>
+      )}
 
-      <ProgressControl
-        inputLabel="Reading pages to add or remove"
-        inputPlaceholder="Pages"
-        onAdd={(amount) => void addAmount("reading", amount, "pages")}
-        onToggleDone={() => void toggleAmountGoalDone("reading")}
-        pending={dayMutationPending || !day.editable}
-        progress={day.goals.reading}
-        quickAmounts={[5, 10]}
-        title="Reading"
-        unitLabel="pages"
-      />
+      {useSliders ? (
+        <SliderControl
+          goal="reading"
+          onSetAmount={(next) => setAmountTo("reading", next, "pages")}
+          onToggleDone={() => void toggleAmountGoalDone("reading")}
+          pending={dayMutationPending || !day.editable}
+          progress={day.goals.reading}
+          title="Reading"
+          unitLabel="pages"
+        />
+      ) : (
+        <ProgressControl
+          inputLabel="Reading pages to add or remove"
+          inputPlaceholder="Pages"
+          onAdd={(amount) => void addAmount("reading", amount, "pages")}
+          onToggleDone={() => void toggleAmountGoalDone("reading")}
+          pending={dayMutationPending || !day.editable}
+          progress={day.goals.reading}
+          quickAmounts={[5, 10]}
+          title="Reading"
+          unitLabel="pages"
+        />
+      )}
 
       <GoalControl
+        onToggleDone={() => void toggleDiet()}
         pending={dayMutationPending || !day.editable}
         progress={day.goals.diet}
         title="Ate well & drank only socially"
-      >
-        <Button
-          aria-pressed={day.goals.diet.met}
-          disabled={dayMutationPending || !day.editable}
-          onClick={() => void toggleDiet()}
-        >
-          {day.goals.diet.met ? "Undo diet" : "Mark diet met"}
-        </Button>
-      </GoalControl>
+      />
 
       <Sheet
         onClose={() => setContainersOpen(false)}
@@ -834,8 +910,8 @@ export function DayTracker({
         title="Water containers"
       >
         <p className="text-muted mb-4 text-sm">
-          Manage your saved containers here. Each one shows up as its own −
-          / + stepper on the Water card.
+          Manage your saved containers here. Each one shows up as its own − / +
+          stepper on the Water card.
         </p>
         <ContainerManager
           containers={containers}
@@ -845,11 +921,13 @@ export function DayTracker({
       </Sheet>
 
       <p className="text-muted px-1 text-xs">
-        Use − and + to log or correct workout, water, and reading amounts;
-        corrections never drop a total below zero. Mark done is a separate
-        toggle that counts the goal complete regardless of the logged amount.
-        Diet uses the latest toggle state; every action can be safely
-        retried.
+        {useSliders
+          ? "Drag a slider to set the total logged for that challenge; releasing it saves, and totals never drop below zero."
+          : "Use − and + to log or correct workout, water, and reading amounts; corrections never drop a total below zero."}{" "}
+        The checkmark on each card is a separate boolean that counts the
+        challenge complete regardless of the amount. It locks on once the amount
+        reaches the target. Switch between sliders and buttons on the Me screen;
+        every action can be safely retried.
       </p>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  amountDeltaTo,
   applyOptimisticAmount,
   applyOptimisticAmountGoalDone,
   applyOptimisticDiet,
@@ -165,6 +166,36 @@ describe("W2 optimistic controls", () => {
       "2026-09-02",
     );
     expect(flooredAtZero.goals.reading.amount).toBe(0);
+  });
+
+  it("turns an absolute slider value into a signed ledger delta", () => {
+    expect(amountDeltaTo(30, 45)).toBe(15);
+    expect(amountDeltaTo(30, 10)).toBe(-20);
+    // Releasing the thumb where it started must not write a ledger row.
+    expect(amountDeltaTo(30, 30)).toBe(0);
+    expect(amountDeltaTo(30, Number.NaN)).toBe(0);
+  });
+
+  it("meets a goal when the slider is dragged to the target", () => {
+    const atTarget = applyOptimisticAmount(
+      emptyDay,
+      "water",
+      amountDeltaTo(emptyDay.goals.water.amount ?? 0, 2_000),
+      "2026-09-02",
+    );
+
+    expect(atTarget.goals.water).toMatchObject({ amount: 2_000, met: true });
+    expect(atTarget.metCount).toBe(1);
+
+    const backToZero = applyOptimisticAmount(
+      atTarget,
+      "water",
+      amountDeltaTo(atTarget.goals.water.amount ?? 0, 0),
+      "2026-09-02",
+    );
+
+    expect(backToZero.goals.water).toMatchObject({ amount: 0, met: false });
+    expect(backToZero.metCount).toBe(0);
   });
 
   it("toggles a manual done flag independently of the amount", () => {

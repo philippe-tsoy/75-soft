@@ -19,6 +19,7 @@ export {
 } from "./invalidation";
 export { createDayTrackingMutationService } from "./mutations";
 export {
+  amountDeltaTo,
   applyOptimisticAmount,
   applyOptimisticDiet,
   applyOptimisticAmountGoalDone,

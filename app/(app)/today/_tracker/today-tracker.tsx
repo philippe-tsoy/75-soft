@@ -2,6 +2,7 @@ import { requireActiveMember } from "@/lib/auth/access";
 
 import { DayTracker } from "@/components/day/day-tracker";
 import { createDayTrackingServices } from "@/features/day-tracking";
+import { getCurrentAmountInputMode } from "@/features/profiles/service";
 
 export interface TodayTrackerServerProps {
   localDate: string;
@@ -18,13 +19,15 @@ export async function TodayTracker({
 }: TodayTrackerServerProps) {
   const access = await requireActiveMember();
   const { containers, reads } = await createDayTrackingServices();
-  const [day, savedContainers] = await Promise.all([
+  const [day, savedContainers, amountInputMode] = await Promise.all([
     reads.getDayRollup(access.user.id, localDate),
     containers.listContainers(access.user.id),
+    getCurrentAmountInputMode(),
   ]);
 
   return (
     <DayTracker
+      amountInputMode={amountInputMode}
       initialContainers={savedContainers}
       initialDay={day}
       today={today}

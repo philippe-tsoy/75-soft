@@ -28,6 +28,22 @@ function withGoalStates(
   };
 }
 
+/**
+ * The slider picks an absolute total for the day, but the ledger only stores
+ * signed deltas. Returns 0 when there is nothing to write, which the caller
+ * treats as "skip the request".
+ */
+export function amountDeltaTo(
+  currentAmount: number,
+  nextValue: number,
+): number {
+  if (!Number.isFinite(nextValue)) {
+    return 0;
+  }
+
+  return Math.round(nextValue) - currentAmount;
+}
+
 export function applyOptimisticAmount(
   day: DayRollupDTO,
   goal: AmountGoal,

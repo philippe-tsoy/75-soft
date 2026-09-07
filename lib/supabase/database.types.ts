@@ -44,6 +44,7 @@ export type Database = {
           avatar_path: string | null;
           timezone: string;
           reaction_palette: Json;
+          amount_input_mode: string;
           created_at: string;
           updated_at: string;
         };
@@ -54,6 +55,7 @@ export type Database = {
           avatar_path?: string | null;
           timezone: string;
           reaction_palette?: Json;
+          amount_input_mode?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -64,6 +66,7 @@ export type Database = {
           avatar_path?: string | null;
           timezone?: string;
           reaction_palette?: Json;
+          amount_input_mode?: string;
           created_at?: string;
           updated_at?: string;
         };

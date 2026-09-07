@@ -22,6 +22,14 @@ export interface ProfileDTO {
   role?: MembershipRole;
 }
 
+/**
+ * How a member logs workout/water/reading amounts on the day tracker:
+ * a drag slider that runs 0 -> target, or the − / + button steppers.
+ */
+export type AmountInputMode = "slider" | "buttons";
+
+export const DEFAULT_AMOUNT_INPUT_MODE: AmountInputMode = "slider";
+
 export interface GoalProgressDTO {
   amount?: number;
   target?: number;

@@ -120,6 +120,12 @@ export const profileUpdateSchema = z.object({
   timezone: timezoneSchema.optional(),
 });
 
+export const amountInputModeSchema = z.enum(["slider", "buttons"]);
+
+export const amountInputModeUpdateSchema = z.object({
+  amountInputMode: amountInputModeSchema,
+});
+
 export const reactionPaletteSchema = z.object({
   emoji: z
     .array(z.string().trim().refine(isSingleEmoji, "Use one emoji per entry"))

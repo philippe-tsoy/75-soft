@@ -2,18 +2,23 @@ import Link from "next/link";
 
 import { OptionalGoalsPanel } from "@/components/optional-goals";
 import { AchievementPanel } from "@/components/achievements";
+import { AmountInputModeEditor } from "@/components/profile/amount-input-mode-editor";
 import { ReactionPaletteEditor } from "@/components/profile/reaction-palette-editor";
 import { Card, CardHeader, CardTitle } from "@/components/ui";
 import { MyTeamPanel } from "@/components/teams/my-team-panel";
 import { ChangePasswordForm, LogoutButton } from "@/features/auth/forms";
 import { ProfileEditor } from "@/features/profiles/profile-editor";
-import { getCurrentProfile } from "@/features/profiles/service";
+import {
+  getCurrentAmountInputMode,
+  getCurrentProfile,
+} from "@/features/profiles/service";
 import { APP_VERSION } from "@/lib/config/version";
 
 export const dynamic = "force-dynamic";
 
 export default async function MePage() {
   const profile = await getCurrentProfile();
+  const amountInputMode = await getCurrentAmountInputMode();
 
   return (
     <div className="space-y-6 py-8">
@@ -69,6 +74,7 @@ export default async function MePage() {
           </div>
         </div>
       </Card>
+      <AmountInputModeEditor initialMode={amountInputMode} />
       <ReactionPaletteEditor />
       <MyTeamPanel userId={profile.id} />
       <OptionalGoalsPanel showArchived />

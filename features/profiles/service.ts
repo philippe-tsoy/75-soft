@@ -15,8 +15,9 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Tables } from "@/lib/supabase/database.types";
-import type { MembershipRole, ProfileDTO } from "@/lib/types";
-import { profileUpdateSchema } from "@/lib/validation";
+import type { AmountInputMode, MembershipRole, ProfileDTO } from "@/lib/types";
+import { DEFAULT_AMOUNT_INPUT_MODE } from "@/lib/types";
+import { amountInputModeSchema, profileUpdateSchema } from "@/lib/validation";
 
 import { buildProfilePhotoPath } from "./photo";
 
@@ -234,6 +235,51 @@ export const getCurrentProfile = cache(async (): Promise<ProfileDTO> => {
 
   return profile;
 });
+
+function toAmountInputMode(value: unknown): AmountInputMode {
+  const parsed = amountInputModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_AMOUNT_INPUT_MODE;
+}
+
+/**
+ * Slider-vs-steppers preference for the day tracker. Read on the server so
+ * Today renders the chosen control on first paint instead of flipping after
+ * hydration. Falls back to the default rather than failing the page.
+ */
+export async function getCurrentAmountInputMode(): Promise<AmountInputMode> {
+  const access: AccessContext = await requireActiveMember();
+  const client = await createSupabaseServerClient();
+  const { data, error } = await client
+    .from("profiles")
+    .select("amount_input_mode")
+    .eq("id", access.user.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return DEFAULT_AMOUNT_INPUT_MODE;
+  }
+
+  return toAmountInputMode(data.amount_input_mode);
+}
+
+export async function updateCurrentAmountInputMode(
+  mode: AmountInputMode,
+): Promise<AmountInputMode> {
+  const access: AccessContext = await requireActiveMember();
+  const client = await createSupabaseServerClient();
+  const { data, error } = await client
+    .from("profiles")
+    .update({ amount_input_mode: mode })
+    .eq("id", access.user.id)
+    .select("amount_input_mode")
+    .single();
+
+  if (error || !data) {
+    throw new Error("Unable to update the amount input mode");
+  }
+
+  return toAmountInputMode(data.amount_input_mode);
+}
 
 export async function getCurrentProfileWithSettings(): Promise<{
   profile: ProfileDTO;
