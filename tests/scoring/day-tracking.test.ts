@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyOptimisticAmount,
+  applyOptimisticAmountGoalDone,
   applyOptimisticDiet,
   createDayTrackingMutationService,
   mapDayRollupRow,
@@ -50,9 +51,27 @@ describe("W2 canonical rollup adapters", () => {
       editable: true,
       invalidated: false,
       goals: {
-        workout: { amount: 45, target: 45, unit: "minutes", met: true },
-        water: { amount: 1_999, target: 2_000, unit: "ml", met: false },
-        reading: { amount: 10, target: 10, unit: "pages", met: true },
+        workout: {
+          amount: 45,
+          target: 45,
+          unit: "minutes",
+          met: true,
+          markedDone: false,
+        },
+        water: {
+          amount: 1_999,
+          target: 2_000,
+          unit: "ml",
+          met: false,
+          markedDone: false,
+        },
+        reading: {
+          amount: 10,
+          target: 10,
+          unit: "pages",
+          met: true,
+          markedDone: false,
+        },
         diet: { target: 1, unit: "attestation", met: true },
       },
       metCount: 3,
@@ -128,6 +147,47 @@ describe("W2 optimistic controls", () => {
       locked,
     );
     expect(applyOptimisticDiet(locked, "2026-09-02")).toBe(locked);
+  });
+
+  it("applies a negative correction and floors the amount at zero", () => {
+    const corrected = applyOptimisticAmount(
+      emptyDay,
+      "reading",
+      -3,
+      "2026-09-02",
+    );
+    expect(corrected.goals.reading.amount).toBe(2);
+
+    const flooredAtZero = applyOptimisticAmount(
+      corrected,
+      "reading",
+      -100,
+      "2026-09-02",
+    );
+    expect(flooredAtZero.goals.reading.amount).toBe(0);
+  });
+
+  it("toggles a manual done flag independently of the amount", () => {
+    const marked = applyOptimisticAmountGoalDone(
+      emptyDay,
+      "workout",
+      "2026-09-02",
+    );
+
+    expect(marked.goals.workout).toMatchObject({
+      amount: 30,
+      markedDone: true,
+      met: true,
+    });
+    expect(marked.metCount).toBe(1);
+
+    const unmarked = applyOptimisticAmountGoalDone(
+      marked,
+      "workout",
+      "2026-09-02",
+    );
+    expect(unmarked.goals.workout.markedDone).toBe(false);
+    expect(unmarked.goals.workout.met).toBe(false);
   });
 });
 

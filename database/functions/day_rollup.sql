@@ -34,6 +34,9 @@ declare
   v_post_water bigint := 0;
   v_post_reading bigint := 0;
   v_diet boolean := false;
+  v_workout_done boolean := false;
+  v_water_done boolean := false;
+  v_reading_done boolean := false;
   v_invalidated boolean := false;
   v_eligible boolean;
   v_met_count integer := 0;
@@ -113,6 +116,12 @@ begin
   v_water := v_water + v_post_water;
   v_reading := v_reading + v_post_reading;
   v_diet := private.day_latest_diet_state(p_user_id, p_local_date, v_as_of);
+  v_workout_done :=
+    private.day_latest_manual_done(p_user_id, p_local_date, 'workout', v_as_of);
+  v_water_done :=
+    private.day_latest_manual_done(p_user_id, p_local_date, 'water', v_as_of);
+  v_reading_done :=
+    private.day_latest_manual_done(p_user_id, p_local_date, 'reading', v_as_of);
 
   if to_regclass('public.day_overrides') is not null then
     execute $query$
@@ -135,9 +144,9 @@ begin
 
   if v_eligible and not v_invalidated then
     v_met_count :=
-      (case when v_workout >= 45 then 1 else 0 end)
-      + (case when v_water >= 2000 then 1 else 0 end)
-      + (case when v_reading >= 10 then 1 else 0 end)
+      (case when v_workout >= 45 or v_workout_done then 1 else 0 end)
+      + (case when v_water >= 2000 or v_water_done then 1 else 0 end)
+      + (case when v_reading >= 10 or v_reading_done then 1 else 0 end)
       + (case when v_diet then 1 else 0 end);
   end if;
 
@@ -173,30 +182,45 @@ begin
         'amount', v_workout,
         'target', 45,
         'unit', 'minutes',
+        'markedDone',
+        case
+          when v_invalidated or not v_eligible then false
+          else v_workout_done
+        end,
         'met',
         case
           when v_invalidated or not v_eligible then false
-          else v_workout >= 45
+          else v_workout >= 45 or v_workout_done
         end
       ),
       'water', jsonb_build_object(
         'amount', v_water,
         'target', 2000,
         'unit', 'ml',
+        'markedDone',
+        case
+          when v_invalidated or not v_eligible then false
+          else v_water_done
+        end,
         'met',
         case
           when v_invalidated or not v_eligible then false
-          else v_water >= 2000
+          else v_water >= 2000 or v_water_done
         end
       ),
       'reading', jsonb_build_object(
         'amount', v_reading,
         'target', 10,
         'unit', 'pages',
+        'markedDone',
+        case
+          when v_invalidated or not v_eligible then false
+          else v_reading_done
+        end,
         'met',
         case
           when v_invalidated or not v_eligible then false
-          else v_reading >= 10
+          else v_reading >= 10 or v_reading_done
         end
       ),
       'diet', jsonb_build_object(

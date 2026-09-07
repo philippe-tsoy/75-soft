@@ -40,9 +40,9 @@ begin
     return;
   end if;
 
-  workout_met := coalesce(rollup.workout_amount >= 45, false);
-  water_met := coalesce(rollup.water_amount >= 2_000, false);
-  reading_met := coalesce(rollup.reading_amount >= 10, false);
+  workout_met := coalesce((rollup.goals -> 'workout' ->> 'met')::boolean, false);
+  water_met := coalesce((rollup.goals -> 'water' ->> 'met')::boolean, false);
+  reading_met := coalesce((rollup.goals -> 'reading' ->> 'met')::boolean, false);
   diet_met := coalesce(rollup.diet_met, false);
   met_count := coalesce(rollup.met_count, 0);
   status := coalesce(rollup.status, 'unscored');
@@ -91,6 +91,7 @@ begin
       from public.day_deltas as delta
       where delta.user_id = p_user_id
         and delta.goal_key = 'water'
+        and delta.amount_int is not null
         and delta.created_at <= p_as_of
       union all
       select

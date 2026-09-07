@@ -44,6 +44,11 @@ export interface DietToggleInput {
   clientOperationId: string;
 }
 
+export interface AmountGoalDoneToggleInput {
+  goal: "workout" | "water" | "reading";
+  clientOperationId: string;
+}
+
 export interface DayTrackingReadService {
   getDayRollup(
     userId: string,
@@ -74,6 +79,11 @@ export interface DayTrackingMutationService {
     userId: string,
     localDate: string,
     input: DietToggleInput,
+  ): Promise<{ deltaId: string; idempotent: boolean }>;
+  toggleAmountGoalDone(
+    userId: string,
+    localDate: string,
+    input: AmountGoalDoneToggleInput,
   ): Promise<{ deltaId: string; idempotent: boolean }>;
 }
 

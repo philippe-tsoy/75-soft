@@ -7,6 +7,7 @@ import type {
 } from "./database";
 import { firstRpcRow } from "./database";
 import type {
+  AmountGoalDoneToggleInput,
   DayAmountInput,
   DayContainerInput,
   DayEntryInput,
@@ -44,6 +45,18 @@ function mutationError(error: DayQueryError): HttpError {
 
   if (message.includes("INVALID_AMOUNT")) {
     return new HttpError(400, "VALIDATION_ERROR", "Invalid day amount");
+  }
+
+  if (message.includes("AMOUNT_ALREADY_ZERO")) {
+    return new HttpError(
+      422,
+      "BUSINESS_RULE_VIOLATION",
+      "This amount is already at zero",
+    );
+  }
+
+  if (message.includes("INVALID_GOAL")) {
+    return new HttpError(400, "VALIDATION_ERROR", "Invalid goal");
   }
 
   if (message.includes("OPERATION_DATE_CONFLICT")) {
@@ -125,6 +138,18 @@ export function createDayTrackingMutationService(
       return runMutation(() =>
         db.rpc("day_toggle_diet", {
           p_local_date: localDate,
+          p_client_operation_id: toggleInput.clientOperationId,
+        }),
+      );
+    },
+
+    async toggleAmountGoalDone(userId, localDate, input) {
+      void userId;
+      const toggleInput: AmountGoalDoneToggleInput = input;
+      return runMutation(() =>
+        db.rpc("day_toggle_amount_goal_done", {
+          p_local_date: localDate,
+          p_goal_key: toggleInput.goal,
           p_client_operation_id: toggleInput.clientOperationId,
         }),
       );

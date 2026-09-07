@@ -131,6 +131,34 @@ begin
 end;
 $$;
 
+create or replace function private.day_latest_manual_done(
+  p_user_id uuid,
+  p_local_date date,
+  p_goal_key text,
+  p_as_of timestamptz default now()
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (
+      select delta.manual_done
+      from public.day_deltas as delta
+      where delta.user_id = p_user_id
+        and delta.local_date = p_local_date
+        and delta.goal_key = p_goal_key
+        and delta.manual_done is not null
+        and delta.created_at <= coalesce(p_as_of, now())
+      order by delta.created_at desc, delta.id desc
+      limit 1
+    ),
+    false
+  );
+$$;
+
 create or replace function private.day_assert_active_actor(
   p_user_id uuid,
   p_local_date date
@@ -186,6 +214,8 @@ $$;
 revoke all on function private.day_is_editable(uuid, date, timestamptz)
   from public;
 revoke all on function private.day_latest_diet_state(uuid, date, timestamptz)
+  from public;
+revoke all on function private.day_latest_manual_done(uuid, date, text, timestamptz)
   from public;
 revoke all on function private.day_assert_active_actor(uuid, date)
   from public;

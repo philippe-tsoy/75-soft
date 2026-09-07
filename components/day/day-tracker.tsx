@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 
 import { AchievementToast } from "@/components/achievements";
 import { Sheet } from "@/components/sheets/sheet";
@@ -15,6 +15,7 @@ import {
 } from "@/features/day-tracking/client";
 import {
   applyOptimisticAmount,
+  applyOptimisticAmountGoalDone,
   applyOptimisticDiet,
 } from "@/features/day-tracking/optimistic";
 import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
@@ -61,6 +62,11 @@ type RetryAction =
   | {
       kind: "diet";
       operationId: string;
+    }
+  | {
+      kind: "goalDone";
+      goal: AmountGoal;
+      operationId: string;
     };
 
 function formatStatus(status: DayRollupDTO["status"]): string {
@@ -100,23 +106,25 @@ function CustomAmountForm({
   const [customAmount, setCustomAmount] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  function submitCustomAmount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const amount = Number(customAmount);
-    if (!Number.isInteger(amount) || amount <= 0) {
+  function submitCustomAmount(sign: 1 | -1) {
+    const magnitude = Number(customAmount);
+    if (!Number.isInteger(magnitude) || magnitude <= 0) {
       setValidationError("Enter a positive whole number.");
       return;
     }
 
     setValidationError(null);
-    onAdd(amount);
+    onAdd(magnitude * sign);
     setCustomAmount("");
   }
 
   return (
     <form
       className="flex min-w-[14rem] flex-1 gap-2"
-      onSubmit={submitCustomAmount}
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitCustomAmount(1);
+      }}
     >
       <Label className="sr-only" htmlFor={id}>
         {inputLabel}
@@ -135,8 +143,16 @@ function CustomAmountForm({
         type="number"
         value={customAmount}
       />
+      <Button
+        disabled={pending}
+        onClick={() => submitCustomAmount(-1)}
+        type="button"
+        variant="secondary"
+      >
+        − Remove
+      </Button>
       <Button disabled={pending} type="submit">
-        Add
+        + Add
       </Button>
       {validationError ? (
         <p className="basis-full text-sm text-red-700" role="alert">
@@ -160,16 +176,15 @@ function CustomWaterAmountForm({
   const [unit, setUnit] = useState<"ml" | "l">("ml");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  function submitCustomAmount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const amount = Number(customAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
+  function submitCustomAmount(sign: 1 | -1) {
+    const magnitude = Number(customAmount);
+    if (!Number.isFinite(magnitude) || magnitude <= 0) {
       setValidationError("Enter a positive whole number.");
       return;
     }
 
     try {
-      normalizeWaterAmount(amount, unit);
+      normalizeWaterAmount(magnitude, unit);
     } catch {
       setValidationError(
         unit === "l"
@@ -180,14 +195,17 @@ function CustomWaterAmountForm({
     }
 
     setValidationError(null);
-    onAdd(amount, unit);
+    onAdd(magnitude * sign, unit);
     setCustomAmount("");
   }
 
   return (
     <form
       className="flex min-w-[14rem] flex-1 flex-wrap gap-2"
-      onSubmit={submitCustomAmount}
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitCustomAmount(1);
+      }}
     >
       <Label className="sr-only" htmlFor={id}>
         Custom water amount
@@ -221,8 +239,16 @@ function CustomWaterAmountForm({
         <option value="ml">ml</option>
         <option value="l">L</option>
       </select>
+      <Button
+        disabled={pending}
+        onClick={() => submitCustomAmount(-1)}
+        type="button"
+        variant="secondary"
+      >
+        − Remove
+      </Button>
       <Button disabled={pending} type="submit">
-        Add
+        + Add
       </Button>
       {validationError ? (
         <p className="basis-full text-sm text-red-700" role="alert">
@@ -233,27 +259,62 @@ function CustomWaterAmountForm({
   );
 }
 
-function remainingToTarget(progress: GoalProgressDTO): number {
-  return Math.max(0, (progress.target ?? 0) - (progress.amount ?? 0));
-}
-
 function MarkDoneButton({
   pending,
   progress,
-  onMarkDone,
+  onToggleDone,
 }: {
   pending: boolean;
   progress: GoalProgressDTO;
-  onMarkDone: () => void;
+  onToggleDone: () => void;
 }) {
   return (
     <Button
-      aria-pressed={progress.met}
-      disabled={pending || progress.met}
-      onClick={onMarkDone}
+      aria-pressed={progress.markedDone}
+      disabled={pending}
+      onClick={onToggleDone}
+      variant={progress.markedDone ? "secondary" : "primary"}
     >
-      {progress.met ? "Done ✓" : "Mark done"}
+      {progress.markedDone ? "Done ✓ (undo)" : "Mark done"}
     </Button>
+  );
+}
+
+function AmountStepper({
+  amount,
+  unitLabel,
+  label,
+  pending,
+  onAdjust,
+}: {
+  amount: number;
+  unitLabel: string;
+  label: string;
+  pending: boolean;
+  onAdjust: (signedAmount: number) => void;
+}) {
+  return (
+    <div className="border-border inline-flex items-center gap-1 rounded-xl border p-1">
+      <Button
+        aria-label={`Remove ${amount} ${unitLabel} from ${label}`}
+        disabled={pending}
+        onClick={() => onAdjust(-amount)}
+        variant="secondary"
+      >
+        −
+      </Button>
+      <span className="min-w-[4.5rem] text-center text-sm font-semibold">
+        {amount} {unitLabel}
+      </span>
+      <Button
+        aria-label={`Add ${amount} ${unitLabel} to ${label}`}
+        disabled={pending}
+        onClick={() => onAdjust(amount)}
+        variant="secondary"
+      >
+        +
+      </Button>
+    </div>
   );
 }
 
@@ -262,7 +323,9 @@ function ProgressControl({
   progress,
   pending,
   onAdd,
+  onToggleDone,
   quickAmounts,
+  unitLabel,
   inputLabel,
   inputPlaceholder,
 }: {
@@ -270,26 +333,28 @@ function ProgressControl({
   progress: GoalProgressDTO;
   pending: boolean;
   onAdd: (amount: number) => void;
+  onToggleDone: () => void;
   quickAmounts: number[];
+  unitLabel: string;
   inputLabel: string;
   inputPlaceholder: string;
 }) {
   return (
     <GoalControl pending={pending} progress={progress} title={title}>
       <MarkDoneButton
-        onMarkDone={() => onAdd(remainingToTarget(progress))}
+        onToggleDone={onToggleDone}
         pending={pending}
         progress={progress}
       />
       {quickAmounts.map((amount) => (
-        <Button
-          disabled={pending}
+        <AmountStepper
+          amount={amount}
           key={amount}
-          onClick={() => onAdd(amount)}
-          variant="secondary"
-        >
-          +{amount}
-        </Button>
+          label={title}
+          onAdjust={onAdd}
+          pending={pending}
+          unitLabel={unitLabel}
+        />
       ))}
       <CustomAmountForm
         id={`${title}-custom-amount`}
@@ -507,6 +572,57 @@ export function DayTracker({
     }
   }
 
+  async function toggleAmountGoalDone(
+    goal: AmountGoal,
+    retryOperationId?: string,
+  ) {
+    if (dayMutationPending) {
+      return;
+    }
+    if (!day.editable) {
+      setError("This day is view-only.");
+      return;
+    }
+
+    const previous = day;
+    const operation = withOperationId(retryOperationId);
+    const action: RetryAction = {
+      goal,
+      kind: "goalDone",
+      operationId: operation.operationId,
+    };
+    setDay(applyOptimisticAmountGoalDone(day, goal, today));
+    setGoalPending(goal, true);
+    setError(null);
+    setSessionExpired(false);
+    setRetryAction(null);
+
+    try {
+      const result = await requestDayApi<DayMutationResponse>(
+        `/api/day/${day.localDate}/goals/${goal}/toggle-done`,
+        {
+          method: "POST",
+          headers: operation.headers,
+          body: JSON.stringify({
+            clientOperationId: operation.operationId,
+          }),
+        },
+      );
+      setDay(result.day);
+      setAchievementToast(result.newAchievements?.[0] ?? null);
+      refreshRelatedData();
+    } catch (requestError) {
+      setDay(previous);
+      setError(apiErrorMessage(requestError));
+      setSessionExpired(
+        requestError instanceof DayApiError && requestError.status === 401,
+      );
+      setRetryAction(action);
+    } finally {
+      setGoalPending(goal, false);
+    }
+  }
+
   function retryFailedAction() {
     if (!retryAction) {
       return;
@@ -524,6 +640,11 @@ export function DayTracker({
 
     if (retryAction.kind === "container") {
       void addContainer(retryAction.container, retryAction.operationId);
+      return;
+    }
+
+    if (retryAction.kind === "goalDone") {
+      void toggleAmountGoalDone(retryAction.goal, retryAction.operationId);
       return;
     }
 
@@ -593,13 +714,15 @@ export function DayTracker({
       </Card>
 
       <ProgressControl
-        inputLabel="Workout minutes to add"
+        inputLabel="Workout minutes to add or remove"
         inputPlaceholder="Minutes"
         onAdd={(amount) => void addAmount("workout", amount, "minutes")}
+        onToggleDone={() => void toggleAmountGoalDone("workout")}
         pending={dayMutationPending || !day.editable}
         progress={day.goals.workout}
         quickAmounts={[15, 30, 45]}
         title="Workout"
+        unitLabel="min"
       />
 
       <GoalControl
@@ -608,13 +731,7 @@ export function DayTracker({
         title="Water"
       >
         <MarkDoneButton
-          onMarkDone={() =>
-            void addAmount(
-              "water",
-              remainingToTarget(day.goals.water),
-              "ml",
-            )
-          }
+          onToggleDone={() => void toggleAmountGoalDone("water")}
           pending={dayMutationPending || !day.editable}
           progress={day.goals.water}
         />
@@ -625,13 +742,13 @@ export function DayTracker({
         >
           Add water container
         </Button>
-        <Button
-          disabled={dayMutationPending || !day.editable}
-          onClick={() => void addAmount("water", 250, "ml")}
-          variant="secondary"
-        >
-          +250 ml
-        </Button>
+        <AmountStepper
+          amount={250}
+          label="Water"
+          onAdjust={(amount) => void addAmount("water", amount, "ml")}
+          pending={dayMutationPending || !day.editable}
+          unitLabel="ml"
+        />
         <CustomWaterAmountForm
           id="water-custom-amount"
           onAdd={(amount, unit) => void addAmount("water", amount, unit)}
@@ -640,13 +757,15 @@ export function DayTracker({
       </GoalControl>
 
       <ProgressControl
-        inputLabel="Reading pages to add"
+        inputLabel="Reading pages to add or remove"
         inputPlaceholder="Pages"
         onAdd={(amount) => void addAmount("reading", amount, "pages")}
+        onToggleDone={() => void toggleAmountGoalDone("reading")}
         pending={dayMutationPending || !day.editable}
         progress={day.goals.reading}
         quickAmounts={[5, 10]}
         title="Reading"
+        unitLabel="pages"
       />
 
       <GoalControl
@@ -711,9 +830,11 @@ export function DayTracker({
       </Sheet>
 
       <p className="text-muted px-1 text-xs">
-        Workout, water, and reading add to the day; Mark done tops up whatever
-        is left to reach the target. Diet uses the latest toggle state; every
-        action can be safely retried.
+        Use − and + to log or correct workout, water, and reading amounts;
+        corrections never drop a total below zero. Mark done is a separate
+        toggle that counts the goal complete regardless of the logged amount.
+        Diet uses the latest toggle state; every action can be safely
+        retried.
       </p>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}

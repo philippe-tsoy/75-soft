@@ -34,12 +34,12 @@ export function applyOptimisticAmount(
   amount: number,
   today: string,
 ): DayRollupDTO {
-  if (!day.editable || !Number.isFinite(amount) || amount <= 0) {
+  if (!day.editable || !Number.isFinite(amount) || amount === 0) {
     return day;
   }
 
   const progress = day.goals[goal];
-  const nextAmount = (progress.amount ?? 0) + amount;
+  const nextAmount = Math.max(0, (progress.amount ?? 0) + amount);
 
   return withGoalStates(
     day,
@@ -48,7 +48,37 @@ export function applyOptimisticAmount(
       [goal]: {
         ...progress,
         amount: nextAmount,
-        met: nextAmount >= (progress.target ?? Number.POSITIVE_INFINITY),
+        met:
+          nextAmount >= (progress.target ?? Number.POSITIVE_INFINITY) ||
+          Boolean(progress.markedDone),
+      },
+    },
+    today,
+  );
+}
+
+export function applyOptimisticAmountGoalDone(
+  day: DayRollupDTO,
+  goal: AmountGoal,
+  today: string,
+): DayRollupDTO {
+  if (!day.editable) {
+    return day;
+  }
+
+  const progress = day.goals[goal];
+  const nextMarkedDone = !progress.markedDone;
+
+  return withGoalStates(
+    day,
+    {
+      ...day.goals,
+      [goal]: {
+        ...progress,
+        markedDone: nextMarkedDone,
+        met:
+          (progress.amount ?? 0) >=
+            (progress.target ?? Number.POSITIVE_INFINITY) || nextMarkedDone,
       },
     },
     today,

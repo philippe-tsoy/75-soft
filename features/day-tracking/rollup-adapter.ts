@@ -62,36 +62,42 @@ export function mapDayRollupRow(row: DayRollupRow): DayRollupDTO {
             ...nestedGoals.workout,
             amount: safeAmount(nestedGoals.workout.amount),
             met: maskGoals ? false : nestedGoals.workout.met,
+            markedDone: maskGoals ? false : nestedGoals.workout.markedDone,
           }
         : {
             amount: safeAmount(row.workout_amount),
             target: 45,
             unit: "minutes",
             met: maskGoals ? false : row.workout_amount >= 45,
+            markedDone: false,
           },
       water: nestedGoals?.water
         ? {
             ...nestedGoals.water,
             amount: safeAmount(nestedGoals.water.amount),
             met: maskGoals ? false : nestedGoals.water.met,
+            markedDone: maskGoals ? false : nestedGoals.water.markedDone,
           }
         : {
             amount: safeAmount(row.water_amount),
             target: 2_000,
             unit: "ml",
             met: maskGoals ? false : row.water_amount >= 2_000,
+            markedDone: false,
           },
       reading: nestedGoals?.reading
         ? {
             ...nestedGoals.reading,
             amount: safeAmount(nestedGoals.reading.amount),
             met: maskGoals ? false : nestedGoals.reading.met,
+            markedDone: maskGoals ? false : nestedGoals.reading.markedDone,
           }
         : {
             amount: safeAmount(row.reading_amount),
             target: 10,
             unit: "pages",
             met: maskGoals ? false : row.reading_amount >= 10,
+            markedDone: false,
           },
       diet: nestedGoals?.diet
         ? {

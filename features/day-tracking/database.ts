@@ -32,18 +32,21 @@ export interface DayRollupRow {
       target: number;
       unit: "minutes";
       met: boolean;
+      markedDone: boolean;
     };
     water: {
       amount: number;
       target: number;
       unit: "ml";
       met: boolean;
+      markedDone: boolean;
     };
     reading: {
       amount: number;
       target: number;
       unit: "pages";
       met: boolean;
+      markedDone: boolean;
     };
     diet: {
       target: number;
@@ -86,7 +89,8 @@ export type DayRpcName =
   | "get_member_daily_board_score"
   | "day_add_amount"
   | "day_add_container_tap"
-  | "day_toggle_diet";
+  | "day_toggle_diet"
+  | "day_toggle_amount_goal_done";
 
 export interface DayRpcArgs {
   get_day_rollup: {
@@ -137,6 +141,11 @@ export interface DayRpcArgs {
     p_local_date: string;
     p_client_operation_id: string;
   };
+  day_toggle_amount_goal_done: {
+    p_local_date: string;
+    p_goal_key: "workout" | "water" | "reading";
+    p_client_operation_id: string;
+  };
 }
 
 export interface DayRpcReturns {
@@ -149,6 +158,7 @@ export interface DayRpcReturns {
   day_add_amount: DayMutationRow[];
   day_add_container_tap: DayMutationRow[];
   day_toggle_diet: DayMutationRow[];
+  day_toggle_amount_goal_done: DayMutationRow[];
 }
 
 export interface DayQueryError {

@@ -73,6 +73,20 @@ export const positiveAmountSchema = z
   .positive()
   .max(1_000_000);
 
+/**
+ * Same range as `positiveAmountSchema` but also allows negative values, used
+ * where a caller may submit a correction (a "-" tap) as well as an addition.
+ * Zero is rejected: it would be a no-op ledger entry.
+ */
+export const signedAmountSchema = z
+  .number()
+  .finite()
+  .refine((value) => value !== 0, "Amount cannot be zero")
+  .refine(
+    (value) => Math.abs(value) <= 1_000_000,
+    "Amount must be 1,000,000 or fewer in magnitude",
+  );
+
 export const waterAmountSchema = z.object({
   amount: positiveAmountSchema,
   unit: z.enum(["ml", "l"]),
@@ -167,9 +181,9 @@ export function normalizeWaterAmount(amount: number, unit: "ml" | "l"): number {
   if (
     Math.abs(normalized - rounded) > 1e-6 ||
     !Number.isSafeInteger(rounded) ||
-    rounded <= 0
+    rounded === 0
   ) {
-    throw new Error("Water amount must resolve to a positive whole ml value");
+    throw new Error("Water amount must resolve to a nonzero whole ml value");
   }
 
   return rounded;

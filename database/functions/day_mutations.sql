@@ -18,6 +18,8 @@ declare
   v_existing_id uuid;
   v_existing_date date;
   v_inserted_id uuid;
+  v_current_sum bigint;
+  v_effective_amount integer;
 begin
   if v_user_id is null then
     raise exception 'AUTH_REQUIRED';
@@ -45,11 +47,43 @@ begin
 
   if p_goal_key not in ('workout', 'water', 'reading')
      or p_amount_int is null
-     or p_amount_int <= 0 then
+     or p_amount_int = 0 then
     raise exception 'INVALID_AMOUNT';
   end if;
 
   perform private.day_assert_active_actor(v_user_id, p_local_date);
+
+  v_effective_amount := p_amount_int;
+
+  if p_amount_int < 0 then
+    /*
+     * Corrections (negative taps) are inserted as their own signed ledger
+     * rows rather than mutating a prior entry, keeping the audit trail
+     * append-only. The advisory lock serializes the read-then-clamp so two
+     * concurrent corrections cannot both observe the same prior sum and
+     * together push the total below zero.
+     */
+    perform pg_advisory_xact_lock(
+      hashtextextended(
+        v_user_id::text || ':' || p_local_date::text || ':' || p_goal_key,
+        1
+      )
+    );
+
+    select coalesce(sum(delta.amount_int), 0)
+    into v_current_sum
+    from public.day_deltas as delta
+    where delta.user_id = v_user_id
+      and delta.local_date = p_local_date
+      and delta.goal_key = p_goal_key
+      and delta.amount_int is not null;
+
+    v_effective_amount := greatest(p_amount_int, -v_current_sum);
+
+    if v_effective_amount = 0 then
+      raise exception 'AMOUNT_ALREADY_ZERO';
+    end if;
+  end if;
 
   insert into public.day_deltas (
     user_id,
@@ -63,7 +97,7 @@ begin
     v_user_id,
     p_local_date,
     p_goal_key,
-    p_amount_int,
+    v_effective_amount,
     'quiet',
     p_client_operation_id
   )
@@ -81,6 +115,112 @@ begin
   else
     return query select v_inserted_id, false;
   end if;
+end;
+$$;
+
+create or replace function public.day_toggle_amount_goal_done(
+  p_local_date date,
+  p_goal_key text,
+  p_client_operation_id text
+)
+returns table (
+  delta_id uuid,
+  idempotent boolean
+)
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_existing_id uuid;
+  v_existing_date date;
+  v_inserted_id uuid;
+  v_current_state boolean;
+begin
+  if v_user_id is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if p_goal_key not in ('workout', 'water', 'reading') then
+    raise exception 'INVALID_GOAL';
+  end if;
+
+  if p_client_operation_id is null
+     or p_client_operation_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'INVALID_OPERATION';
+  end if;
+
+  select delta.id, delta.local_date
+  into v_existing_id, v_existing_date
+  from public.day_deltas as delta
+  where delta.user_id = v_user_id
+    and delta.client_operation_id = p_client_operation_id;
+
+  if found then
+    if v_existing_date <> p_local_date then
+      raise exception 'OPERATION_DATE_CONFLICT';
+    end if;
+
+    return query select v_existing_id, true;
+    return;
+  end if;
+
+  perform private.day_assert_active_actor(v_user_id, p_local_date);
+
+  /*
+   * Same advisory-lock-then-flip shape as day_toggle_diet: serializes the
+   * derived-state read and the inverse append for one member/date/goal.
+   */
+  perform pg_advisory_xact_lock(
+    hashtextextended(
+      v_user_id::text || ':' || p_local_date::text || ':' || p_goal_key,
+      2
+    )
+  );
+
+  select delta.id, delta.local_date
+  into v_existing_id, v_existing_date
+  from public.day_deltas as delta
+  where delta.user_id = v_user_id
+    and delta.client_operation_id = p_client_operation_id;
+
+  if found then
+    if v_existing_date <> p_local_date then
+      raise exception 'OPERATION_DATE_CONFLICT';
+    end if;
+
+    return query select v_existing_id, true;
+    return;
+  end if;
+
+  v_current_state := private.day_latest_manual_done(
+    v_user_id,
+    p_local_date,
+    p_goal_key,
+    now()
+  );
+
+  insert into public.day_deltas (
+    user_id,
+    local_date,
+    goal_key,
+    manual_done,
+    source,
+    client_operation_id
+  )
+  values (
+    v_user_id,
+    p_local_date,
+    p_goal_key,
+    not v_current_state,
+    'quiet',
+    p_client_operation_id
+  )
+  returning id into v_inserted_id;
+
+  return query select v_inserted_id, false;
 end;
 $$;
 
@@ -284,9 +424,13 @@ revoke all on function public.day_add_container_tap(date, uuid, text)
   from public;
 revoke all on function public.day_toggle_diet(date, text)
   from public;
+revoke all on function public.day_toggle_amount_goal_done(date, text, text)
+  from public;
 grant execute on function public.day_add_amount(date, text, integer, text)
   to authenticated;
 grant execute on function public.day_add_container_tap(date, uuid, text)
   to authenticated;
 grant execute on function public.day_toggle_diet(date, text)
+  to authenticated;
+grant execute on function public.day_toggle_amount_goal_done(date, text, text)
   to authenticated;

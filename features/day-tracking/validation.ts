@@ -9,10 +9,11 @@ import {
   containerInputSchema,
   normalizeWaterAmount,
   operationIdSchema,
-  positiveAmountSchema,
+  signedAmountSchema,
 } from "@/lib/validation";
 
 import type {
+  AmountGoalDoneToggleInput,
   ContainerCreateInput,
   ContainerUpdateInput,
   DayAmountInput,
@@ -27,7 +28,7 @@ const amountUnitSchema = z.enum(["minutes", "ml", "l", "pages"]);
 export const dayAmountInputSchema = z
   .object({
     goal: amountGoalSchema,
-    amount: positiveAmountSchema,
+    amount: signedAmountSchema,
     unit: amountUnitSchema.optional(),
     clientOperationId: operationIdSchema.optional(),
   })
@@ -47,6 +48,12 @@ export const dayEntryInputSchema = z.union([
 ]);
 
 export const dietToggleInputSchema = z
+  .object({
+    clientOperationId: operationIdSchema.optional(),
+  })
+  .strict();
+
+export const amountGoalDoneToggleInputSchema = z
   .object({
     clientOperationId: operationIdSchema.optional(),
   })
@@ -98,6 +105,30 @@ export function parseDietToggleInput(
   const parsed = dietToggleInputSchema.safeParse(value);
   if (!parsed.success) {
     throw zodValidationError("Invalid diet toggle", parsed.error);
+  }
+
+  return parsed.data;
+}
+
+const amountGoalPathSchema = z.enum(["workout", "water", "reading"]);
+
+export function parseAmountGoalPathSegment(
+  value: string,
+): "workout" | "water" | "reading" {
+  const parsed = amountGoalPathSchema.safeParse(value);
+  if (!parsed.success) {
+    throw validationError("Goal must be workout, water, or reading");
+  }
+
+  return parsed.data;
+}
+
+export function parseAmountGoalDoneToggleInput(
+  value: unknown,
+): z.infer<typeof amountGoalDoneToggleInputSchema> {
+  const parsed = amountGoalDoneToggleInputSchema.safeParse(value);
+  if (!parsed.success) {
+    throw zodValidationError("Invalid goal toggle", parsed.error);
   }
 
   return parsed.data;
@@ -179,7 +210,7 @@ export function normalizeDayAmount(input: DayAmountInput): DayAmountInput {
       };
     } catch {
       throw validationError(
-        "Water amount must resolve to a positive whole ml value",
+        "Water amount must resolve to a nonzero whole ml value",
       );
     }
   }
@@ -220,6 +251,21 @@ export function parseAndResolveDietToggle(
 ): DietToggleInput {
   const input = parseDietToggleInput(value);
   return {
+    clientOperationId: resolveClientOperationId(
+      request,
+      input.clientOperationId,
+    ),
+  };
+}
+
+export function parseAndResolveAmountGoalDoneToggle(
+  value: unknown,
+  request: Request,
+  goal: "workout" | "water" | "reading",
+): AmountGoalDoneToggleInput {
+  const input = parseAmountGoalDoneToggleInput(value);
+  return {
+    goal,
     clientOperationId: resolveClientOperationId(
       request,
       input.clientOperationId,

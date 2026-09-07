@@ -27,6 +27,12 @@ export interface GoalProgressDTO {
   target?: number;
   unit?: "minutes" | "ml" | "pages" | "attestation";
   met: boolean;
+  /**
+   * Manually toggled "done" state for an amount-based goal (workout, water,
+   * reading), independent of amount vs. target. `met` already folds this in;
+   * this is exposed separately so the UI can show the toggle's own state.
+   */
+  markedDone?: boolean;
 }
 
 export interface DayRollupDTO {

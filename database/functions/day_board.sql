@@ -48,15 +48,15 @@ begin
     end,
     case
       when rollup.invalidated or rollup.status = 'unscored' then false
-      else rollup.workout_amount >= 45
+      else coalesce((rollup.goals -> 'workout' ->> 'met')::boolean, false)
     end,
     case
       when rollup.invalidated or rollup.status = 'unscored' then false
-      else rollup.water_amount >= 2000
+      else coalesce((rollup.goals -> 'water' ->> 'met')::boolean, false)
     end,
     case
       when rollup.invalidated or rollup.status = 'unscored' then false
-      else rollup.reading_amount >= 10
+      else coalesce((rollup.goals -> 'reading' ->> 'met')::boolean, false)
     end,
     case
       when rollup.invalidated or rollup.status = 'unscored' then false

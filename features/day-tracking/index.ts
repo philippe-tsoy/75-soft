@@ -18,7 +18,11 @@ export {
   invalidateDayTracking,
 } from "./invalidation";
 export { createDayTrackingMutationService } from "./mutations";
-export { applyOptimisticAmount, applyOptimisticDiet } from "./optimistic";
+export {
+  applyOptimisticAmount,
+  applyOptimisticDiet,
+  applyOptimisticAmountGoalDone,
+} from "./optimistic";
 export {
   createDayTrackingReadService,
   mapCalendarCellRow,
@@ -28,13 +32,17 @@ export {
 } from "./rollup-adapter";
 export { createDayTrackingServices } from "./server";
 export {
+  amountGoalDoneToggleInputSchema,
   containerPatchSchema,
   dayAmountInputSchema,
   dayContainerInputSchema,
   dayEntryInputSchema,
   dietToggleInputSchema,
   normalizeDayAmount,
+  parseAmountGoalDoneToggleInput,
+  parseAmountGoalPathSegment,
   parseAndNormalizeDayEntry,
+  parseAndResolveAmountGoalDoneToggle,
   parseAndResolveDietToggle,
   parseContainerCreateInput,
   parseContainerUpdateInput,
