@@ -75,10 +75,6 @@ function quickAmountsFor(target: number): number[] {
   );
 }
 
-function formatStatus(status: DayRollupDTO["status"]): string {
-  return status.replace("_", " ");
-}
-
 function apiErrorMessage(error: unknown): string {
   if (error instanceof DayApiError && error.status === 401) {
     return "Your session expired. Sign in again to save changes.";
@@ -737,41 +733,31 @@ export function DayTracker({
     return <EmptyGoalsState userId={userId} />;
   }
 
+  const percentComplete = Math.round((day.metCount / day.totalCount) * 100);
+
   return (
-    <div className="space-y-4 py-6">
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-primary text-sm font-semibold tracking-wide">
-              Day {day.dayNumber}
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold">
-              {day.localDate === today
-                ? "Today's challenges"
-                : "Yesterday's challenges"}
-            </h1>
-            <p className="text-muted mt-2 text-sm">
-              {day.localDate} · {formatStatus(day.status)}
-            </p>
-          </div>
-          <p
-            aria-label={`${day.metCount} of ${day.totalCount} goals met`}
-            className="text-sm font-semibold"
-          >
-            {day.metCount}/{day.totalCount} met
-          </p>
-        </div>
+    <div className="space-y-4 pb-6">
+      <div className="pt-4">
+        <p className="text-primary text-sm font-semibold tracking-wide">
+          Day {day.dayNumber}
+        </p>
+        <h1
+          aria-label={`${day.metCount} of ${day.totalCount} goals met`}
+          className="mt-1 text-4xl font-bold tracking-tight"
+        >
+          {percentComplete}% complete
+        </h1>
         {!day.editable ? (
-          <p className="text-muted mt-4 rounded-xl bg-slate-100 p-3 text-sm">
+          <p className="text-muted mt-3 rounded-xl bg-slate-100 p-3 text-sm">
             This day is view-only. Only today and yesterday can be changed.
           </p>
         ) : null}
         {day.invalidated ? (
-          <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">
+          <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">
             This day was invalidated by an administrator.
           </p>
         ) : null}
-      </Card>
+      </div>
 
       {day.goals.map((goal) => {
         const goalPending = isPending(goal.id) || !day.editable;
@@ -896,17 +882,6 @@ export function DayTracker({
         />
       </Sheet>
 
-      <p className="text-muted px-1 text-xs">
-        {useSliders
-          ? "Drag a slider to set the total logged for that goal; releasing it saves, and totals never drop below zero."
-          : "Use − and + to log or correct a goal's amount; corrections never drop a total below zero."}{" "}
-        The checkmark on a numeric goal fills the amount to the target;
-        tapping it again restores whatever amount was logged before.
-        Reaching the target by dragging the slider itself locks the
-        checkmark until you move the amount back down. Switch between
-        sliders and buttons, and add or remove goals, on the Me screen;
-        every action can be safely retried.
-      </p>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}
         toast={achievementToast}

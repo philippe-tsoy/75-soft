@@ -7,8 +7,26 @@ import { useState } from "react";
 
 import { PostComposer } from "@/components/feed/post-composer";
 import { fetchGoals } from "@/components/goals";
-import { Button, Card, CardHeader, CardTitle } from "@/components/ui";
 import { queryKeys } from "@/lib/query-keys";
+
+function PostIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={24}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      width={24}
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
 
 export function TodayActions({
   localDate,
@@ -43,23 +61,23 @@ export function TodayActions({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Keep your day moving</CardTitle>
-          <p className="text-muted mt-1 text-sm">
-            Log quietly here, or share a progress update with the group.
-          </p>
-        </CardHeader>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setComposerOpen(true)}>Post update</Button>
-          <Link
-            className="border-border bg-card text-foreground hover:bg-surface-accent focus-visible:ring-primary inline-flex min-h-11 items-center rounded-xl border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-            href="/yesterday"
-          >
-            Review yesterday
-          </Link>
-        </div>
-      </Card>
+      {allowYesterday ? (
+        <Link
+          className="text-muted hover:text-foreground focus-visible:ring-primary inline-block text-xs font-semibold outline-none focus-visible:ring-2"
+          href="/yesterday"
+        >
+          Review yesterday
+        </Link>
+      ) : null}
+
+      <button
+        aria-label="Post an update"
+        className="bg-primary text-primary-foreground focus-visible:ring-primary fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-95"
+        onClick={() => setComposerOpen(true)}
+        type="button"
+      >
+        <PostIcon />
+      </button>
 
       <PostComposer
         allowYesterday={allowYesterday}

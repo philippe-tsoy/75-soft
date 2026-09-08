@@ -8,6 +8,17 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+}));
+
 import { PostCard } from "@/components/feed/post-card";
 import { PostComposer } from "@/components/feed/post-composer";
 import { QueryProvider } from "@/components/providers/query-provider";

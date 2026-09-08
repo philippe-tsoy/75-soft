@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { GoalsPanel } from "@/components/goals";
 import { AchievementPanel } from "@/components/achievements";
+import { CalendarGrid } from "@/components/person/calendar-grid";
 import { AmountInputModeEditor } from "@/components/profile/amount-input-mode-editor";
 import { ReactionPaletteEditor } from "@/components/profile/reaction-palette-editor";
 import { Card, CardHeader, CardTitle } from "@/components/ui";
 import { MyTeamPanel } from "@/components/teams/my-team-panel";
+import { COHORT_START_DATE } from "@/lib/config/75-soft";
+import { createDayTrackingServices } from "@/features/day-tracking";
 import { ChangePasswordForm, LogoutButton } from "@/features/auth/forms";
 import { ProfileEditor } from "@/features/profiles/profile-editor";
 import {
@@ -13,12 +16,19 @@ import {
   getCurrentProfile,
 } from "@/features/profiles/service";
 import { APP_VERSION } from "@/lib/config/version";
+import { getMemberLocalDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
 export default async function MePage() {
   const profile = await getCurrentProfile();
   const amountInputMode = await getCurrentAmountInputMode();
+  const today = getMemberLocalDate(new Date(), profile.timezone ?? "UTC");
+  const { reads } = await createDayTrackingServices();
+  const calendar =
+    today >= COHORT_START_DATE
+      ? await reads.getCalendar(profile.id, COHORT_START_DATE, today)
+      : [];
 
   return (
     <div className="space-y-6 py-8">
@@ -77,6 +87,7 @@ export default async function MePage() {
       <ReactionPaletteEditor />
       <MyTeamPanel userId={profile.id} />
       <GoalsPanel showArchived />
+      <CalendarGrid cells={calendar} />
       <AchievementPanel />
       <p className="text-muted text-center text-xs">Version {APP_VERSION}</p>
     </div>
