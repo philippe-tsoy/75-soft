@@ -41,6 +41,8 @@ export interface DayTrackerProps {
   userId: string;
   today: string;
   amountInputMode: AmountInputMode;
+  /** False only when the member has never added a goal at all. */
+  hasAnyGoals: boolean;
 }
 
 interface DayMutationResponse {
@@ -430,12 +432,29 @@ function EmptyGoalsState({ userId }: { userId: string }) {
   );
 }
 
+/**
+ * Shown instead of EmptyGoalsState when the member already has goals, but
+ * none were active yet as of this particular day (e.g. reviewing yesterday
+ * right after adding a first goal today) -- goal history is reconstructed
+ * per day, so this is expected and not an invitation to add goals again.
+ */
+function NoGoalsActiveState({ localDate }: { localDate: string }) {
+  return (
+    <div className="py-10 text-center">
+      <p className="text-muted text-sm">
+        You hadn&apos;t added any goals yet as of {localDate}.
+      </p>
+    </div>
+  );
+}
+
 export function DayTracker({
   initialDay,
   initialContainers,
   userId,
   today,
   amountInputMode,
+  hasAnyGoals,
 }: DayTrackerProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -730,7 +749,11 @@ export function DayTracker({
   }
 
   if (day.goals.length === 0) {
-    return <EmptyGoalsState userId={userId} />;
+    return hasAnyGoals ? (
+      <NoGoalsActiveState localDate={day.localDate} />
+    ) : (
+      <EmptyGoalsState userId={userId} />
+    );
   }
 
   const percentComplete = Math.round((day.metCount / day.totalCount) * 100);
@@ -738,15 +761,37 @@ export function DayTracker({
   return (
     <div className="space-y-4 pb-6">
       <div className="pt-4">
-        <p className="text-primary text-sm font-semibold tracking-wide">
-          Day {day.dayNumber}
-        </p>
-        <h1
-          aria-label={`${day.metCount} of ${day.totalCount} goals met`}
-          className="mt-1 text-4xl font-bold tracking-tight"
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-muted text-sm font-semibold tracking-wide">
+              Day
+            </p>
+            <h1 className="text-4xl font-bold tracking-tight">
+              {day.dayNumber}
+            </h1>
+          </div>
+          <div className="text-right">
+            <p className="text-muted text-sm font-semibold tracking-wide">
+              Complete
+            </p>
+            <p className="text-4xl font-bold tracking-tight">
+              {percentComplete}%
+            </p>
+          </div>
+        </div>
+        <div
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={percentComplete}
+          aria-valuetext={`${day.metCount} of ${day.totalCount} goals met`}
+          className="bg-surface-accent mt-4 h-3 w-full overflow-hidden rounded-full"
+          role="progressbar"
         >
-          {percentComplete}% complete
-        </h1>
+          <div
+            className="bg-primary h-full rounded-full transition-[width] duration-300"
+            style={{ width: `${percentComplete}%` }}
+          />
+        </div>
         {!day.editable ? (
           <p className="text-muted mt-3 rounded-xl bg-slate-100 p-3 text-sm">
             This day is view-only. Only today and yesterday can be changed.
