@@ -1,6 +1,6 @@
 create or replace function public.day_add_amount(
   p_local_date date,
-  p_goal_key text,
+  p_goal_id uuid,
   p_amount_int integer,
   p_client_operation_id text
 )
@@ -45,7 +45,7 @@ begin
     return;
   end if;
 
-  if p_goal_key not in ('workout', 'water', 'reading')
+  if p_goal_id is null
      or p_amount_int is null
      or p_amount_int = 0 then
     raise exception 'INVALID_AMOUNT';
@@ -65,7 +65,7 @@ begin
      */
     perform pg_advisory_xact_lock(
       hashtextextended(
-        v_user_id::text || ':' || p_local_date::text || ':' || p_goal_key,
+        v_user_id::text || ':' || p_local_date::text || ':' || p_goal_id::text,
         1
       )
     );
@@ -75,7 +75,7 @@ begin
     from public.day_deltas as delta
     where delta.user_id = v_user_id
       and delta.local_date = p_local_date
-      and delta.goal_key = p_goal_key
+      and delta.goal_id = p_goal_id
       and delta.amount_int is not null;
 
     v_effective_amount := greatest(p_amount_int, -v_current_sum);
@@ -88,7 +88,7 @@ begin
   insert into public.day_deltas (
     user_id,
     local_date,
-    goal_key,
+    goal_id,
     amount_int,
     source,
     client_operation_id
@@ -96,7 +96,7 @@ begin
   values (
     v_user_id,
     p_local_date,
-    p_goal_key,
+    p_goal_id,
     v_effective_amount,
     'quiet',
     p_client_operation_id
@@ -118,9 +118,9 @@ begin
 end;
 $$;
 
-create or replace function public.day_toggle_amount_goal_done(
+create or replace function public.day_toggle_goal_done(
   p_local_date date,
-  p_goal_key text,
+  p_goal_id uuid,
   p_client_operation_id text
 )
 returns table (
@@ -143,7 +143,7 @@ begin
     raise exception 'AUTH_REQUIRED';
   end if;
 
-  if p_goal_key not in ('workout', 'water', 'reading') then
+  if p_goal_id is null then
     raise exception 'INVALID_GOAL';
   end if;
 
@@ -170,12 +170,13 @@ begin
   perform private.day_assert_active_actor(v_user_id, p_local_date);
 
   /*
-   * Same advisory-lock-then-flip shape as day_toggle_diet: serializes the
-   * derived-state read and the inverse append for one member/date/goal.
+   * Advisory lock serializes the derived-state read and the inverse append
+   * for one member/date/goal, the same shape every quiet toggle in this
+   * ledger uses.
    */
   perform pg_advisory_xact_lock(
     hashtextextended(
-      v_user_id::text || ':' || p_local_date::text || ':' || p_goal_key,
+      v_user_id::text || ':' || p_local_date::text || ':' || p_goal_id::text,
       2
     )
   );
@@ -198,14 +199,14 @@ begin
   v_current_state := private.day_latest_manual_done(
     v_user_id,
     p_local_date,
-    p_goal_key,
+    p_goal_id,
     now()
   );
 
   insert into public.day_deltas (
     user_id,
     local_date,
-    goal_key,
+    goal_id,
     manual_done,
     source,
     client_operation_id
@@ -213,7 +214,7 @@ begin
   values (
     v_user_id,
     p_local_date,
-    p_goal_key,
+    p_goal_id,
     not v_current_state,
     'quiet',
     p_client_operation_id
@@ -227,6 +228,7 @@ $$;
 create or replace function public.day_add_container_tap(
   p_local_date date,
   p_container_id uuid,
+  p_goal_id uuid,
   p_client_operation_id text
 )
 returns table (
@@ -247,6 +249,10 @@ declare
 begin
   if v_user_id is null then
     raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if p_goal_id is null then
+    raise exception 'INVALID_AMOUNT';
   end if;
 
   if p_client_operation_id is null
@@ -286,7 +292,7 @@ begin
   insert into public.day_deltas (
     user_id,
     local_date,
-    goal_key,
+    goal_id,
     amount_int,
     source,
     client_operation_id
@@ -294,7 +300,7 @@ begin
   values (
     v_user_id,
     p_local_date,
-    'water',
+    p_goal_id,
     v_volume_ml,
     'quiet',
     p_client_operation_id
@@ -316,121 +322,15 @@ begin
 end;
 $$;
 
-create or replace function public.day_toggle_diet(
-  p_local_date date,
-  p_client_operation_id text
-)
-returns table (
-  delta_id uuid,
-  idempotent boolean
-)
-language plpgsql
-volatile
-security definer
-set search_path = public
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_existing_id uuid;
-  v_existing_date date;
-  v_inserted_id uuid;
-  v_current_state boolean;
-begin
-  if v_user_id is null then
-    raise exception 'AUTH_REQUIRED';
-  end if;
-
-  if p_client_operation_id is null
-     or p_client_operation_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
-    raise exception 'INVALID_OPERATION';
-  end if;
-
-  select delta.id, delta.local_date
-  into v_existing_id, v_existing_date
-  from public.day_deltas as delta
-  where delta.user_id = v_user_id
-    and delta.client_operation_id = p_client_operation_id;
-
-  if found then
-    if v_existing_date <> p_local_date then
-      raise exception 'OPERATION_DATE_CONFLICT';
-    end if;
-
-    return query select v_existing_id, true;
-    return;
-  end if;
-
-  perform private.day_assert_active_actor(v_user_id, p_local_date);
-
-  /*
-   * Advisory locks serialize the derived-state read and inverse append for
-   * one member/date. Distinct concurrent taps therefore become true/false
-   * events rather than both observing the same prior state.
-   */
-  perform pg_advisory_xact_lock(
-    hashtextextended(
-      v_user_id::text || ':' || p_local_date::text,
-      0
-    )
-  );
-
-  -- Re-check after waiting for another toggle to commit.
-  select delta.id, delta.local_date
-  into v_existing_id, v_existing_date
-  from public.day_deltas as delta
-  where delta.user_id = v_user_id
-    and delta.client_operation_id = p_client_operation_id;
-
-  if found then
-    if v_existing_date <> p_local_date then
-      raise exception 'OPERATION_DATE_CONFLICT';
-    end if;
-
-    return query select v_existing_id, true;
-    return;
-  end if;
-
-  v_current_state := private.day_latest_diet_state(
-    v_user_id,
-    p_local_date,
-    now()
-  );
-
-  insert into public.day_deltas (
-    user_id,
-    local_date,
-    goal_key,
-    diet_value,
-    source,
-    client_operation_id
-  )
-  values (
-    v_user_id,
-    p_local_date,
-    'diet',
-    not v_current_state,
-    'quiet',
-    p_client_operation_id
-  )
-  returning id into v_inserted_id;
-
-  return query select v_inserted_id, false;
-end;
-$$;
-
-revoke all on function public.day_add_amount(date, text, integer, text)
+revoke all on function public.day_add_amount(date, uuid, integer, text)
   from public;
-revoke all on function public.day_add_container_tap(date, uuid, text)
+revoke all on function public.day_add_container_tap(date, uuid, uuid, text)
   from public;
-revoke all on function public.day_toggle_diet(date, text)
+revoke all on function public.day_toggle_goal_done(date, uuid, text)
   from public;
-revoke all on function public.day_toggle_amount_goal_done(date, text, text)
-  from public;
-grant execute on function public.day_add_amount(date, text, integer, text)
+grant execute on function public.day_add_amount(date, uuid, integer, text)
   to authenticated;
-grant execute on function public.day_add_container_tap(date, uuid, text)
+grant execute on function public.day_add_container_tap(date, uuid, uuid, text)
   to authenticated;
-grant execute on function public.day_toggle_diet(date, text)
-  to authenticated;
-grant execute on function public.day_toggle_amount_goal_done(date, text, text)
+grant execute on function public.day_toggle_goal_done(date, uuid, text)
   to authenticated;

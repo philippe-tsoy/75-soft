@@ -1,3 +1,13 @@
+-- private.day_rollup_unchecked's return shape changed from a fixed set of
+-- workout/water/reading/diet columns to a dynamic per-member goal list
+-- (met_count/total_count + a goals jsonb array). Postgres cannot
+-- create-or-replace a function across a return-type change, so every
+-- affected signature is dropped first. This runs safely against a fresh
+-- database too, since "drop function if exists" is a no-op there.
+drop function if exists private.day_rollup_unchecked(uuid, date, timestamptz);
+drop function if exists public.get_day_rollup(uuid, date, timestamptz);
+drop function if exists public.get_member_day_rollup(uuid, uuid, date, timestamptz);
+
 create or replace function private.day_rollup_unchecked(
   p_user_id uuid,
   p_local_date date,
@@ -9,11 +19,8 @@ returns table (
   status text,
   editable boolean,
   invalidated boolean,
-  workout_amount bigint,
-  water_amount bigint,
-  reading_amount bigint,
-  diet_met boolean,
   met_count integer,
+  total_count integer,
   goals jsonb
 )
 language plpgsql
@@ -27,19 +34,11 @@ declare
   v_join_date date;
   v_cohort_start date;
   v_timezone text;
-  v_workout bigint := 0;
-  v_water bigint := 0;
-  v_reading bigint := 0;
-  v_post_workout bigint := 0;
-  v_post_water bigint := 0;
-  v_post_reading bigint := 0;
-  v_diet boolean := false;
-  v_workout_done boolean := false;
-  v_water_done boolean := false;
-  v_reading_done boolean := false;
   v_invalidated boolean := false;
   v_eligible boolean;
   v_met_count integer := 0;
+  v_total_count integer := 0;
+  v_goals jsonb := '[]'::jsonb;
   v_status text;
 begin
   if p_user_id is null then
@@ -70,59 +69,6 @@ begin
 
   v_today = timezone(v_timezone, v_as_of)::date;
 
-  select
-    coalesce(sum(delta.amount_int) filter (where delta.goal_key = 'workout'), 0),
-    coalesce(sum(delta.amount_int) filter (where delta.goal_key = 'water'), 0),
-    coalesce(sum(delta.amount_int) filter (where delta.goal_key = 'reading'), 0)
-  into
-    v_workout,
-    v_water,
-    v_reading
-  from public.day_deltas as delta
-  where delta.user_id = p_user_id
-    and delta.local_date = p_local_date
-    and delta.created_at <= v_as_of;
-
-  /*
-   * Posts are an optional later-workstream source. Dynamic SQL lets the W2
-   * migration apply before posts exist without creating a second rollup.
-   */
-  if to_regclass('public.posts') is not null
-     and to_regclass('public.post_goal_entries') is not null then
-    execute $query$
-      select
-        coalesce(sum(entry.amount_int)
-          filter (where entry.required_goal_key = 'workout'), 0),
-        coalesce(sum(entry.amount_int)
-          filter (where entry.required_goal_key = 'water'), 0),
-        coalesce(sum(entry.amount_int)
-          filter (where entry.required_goal_key = 'reading'), 0)
-      from public.posts as post
-      join public.post_goal_entries as entry
-        on entry.post_id = post.id
-      where post.author_id = $1
-        and post.local_date = $2
-        and post.status = 'published'
-        and coalesce(post.published_at, post.created_at) <= $3
-    $query$
-    into
-      v_post_workout,
-      v_post_water,
-      v_post_reading
-    using p_user_id, p_local_date, v_as_of;
-  end if;
-
-  v_workout := v_workout + v_post_workout;
-  v_water := v_water + v_post_water;
-  v_reading := v_reading + v_post_reading;
-  v_diet := private.day_latest_diet_state(p_user_id, p_local_date, v_as_of);
-  v_workout_done :=
-    private.day_latest_manual_done(p_user_id, p_local_date, 'workout', v_as_of);
-  v_water_done :=
-    private.day_latest_manual_done(p_user_id, p_local_date, 'water', v_as_of);
-  v_reading_done :=
-    private.day_latest_manual_done(p_user_id, p_local_date, 'reading', v_as_of);
-
   if to_regclass('public.day_overrides') is not null then
     execute $query$
       select exists (
@@ -143,18 +89,87 @@ begin
     and p_local_date >= v_join_date;
 
   if v_eligible and not v_invalidated then
-    v_met_count :=
-      (case when v_workout >= 45 or v_workout_done then 1 else 0 end)
-      + (case when v_water >= 2000 or v_water_done then 1 else 0 end)
-      + (case when v_reading >= 10 or v_reading_done then 1 else 0 end)
-      + (case when v_diet then 1 else 0 end);
+    /*
+     * "Active on p_local_date" reconstructs each goal's own historical
+     * membership window from created_at/archived_at (compared in the
+     * member's own timezone, like every other date boundary in this
+     * function), so adding or archiving a goal later never retroactively
+     * changes an earlier day's denominator -- the same "state as of a point
+     * in time" principle day_latest_manual_done already relies on.
+     */
+    select
+      count(*)::integer,
+      count(*) filter (where goal_state.met)::integer,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', goal_state.id,
+            'name',
+              case when goal_state.is_private then 'Secret goal'
+              else goal_state.name end,
+            'isPrivate', goal_state.is_private,
+            'amount', goal_state.amount,
+            'target', goal_state.target_value,
+            'unit', goal_state.unit,
+            'markedDone', goal_state.marked_done,
+            'met', goal_state.met
+          )
+          order by goal_state.sort_order, goal_state.created_at
+        ),
+        '[]'::jsonb
+      )
+    into v_total_count, v_met_count, v_goals
+    from (
+      select
+        goal.id,
+        goal.name,
+        goal.is_private,
+        goal.target_value,
+        goal.unit,
+        goal.sort_order,
+        goal.created_at,
+        case when goal.target_value is null then null
+          else coalesce(sum(delta.amount_int), 0)
+        end as amount,
+        private.day_latest_manual_done(
+          p_user_id, p_local_date, goal.id, v_as_of
+        ) as marked_done,
+        case
+          when goal.target_value is null then
+            private.day_latest_manual_done(
+              p_user_id, p_local_date, goal.id, v_as_of
+            )
+          else
+            coalesce(sum(delta.amount_int), 0) >= goal.target_value
+            or private.day_latest_manual_done(
+              p_user_id, p_local_date, goal.id, v_as_of
+            )
+        end as met
+      from public.goals as goal
+      left join public.day_deltas as delta
+        on delta.goal_id = goal.id
+       and delta.local_date = p_local_date
+       and delta.created_at <= v_as_of
+       and delta.amount_int is not null
+      where goal.owner_id = p_user_id
+        and timezone(v_timezone, goal.created_at)::date <= p_local_date
+        and (
+          goal.archived_at is null
+          or timezone(v_timezone, goal.archived_at)::date > p_local_date
+        )
+      group by
+        goal.id, goal.name, goal.is_private, goal.target_value,
+        goal.unit, goal.sort_order, goal.created_at
+    ) as goal_state;
   end if;
 
   if not v_eligible then
     v_status := 'unscored';
   elsif p_local_date > v_today then
     v_status := 'future';
-  elsif v_met_count = 4 then
+  elsif v_total_count = 0 then
+    v_status := 'unscored';
+  elsif v_met_count = v_total_count then
     v_status := 'complete';
   elsif p_local_date = v_today then
     v_status := case when v_met_count = 0 then 'open' else 'in_progress' end;
@@ -169,70 +184,12 @@ begin
     v_status,
     private.day_is_editable(p_user_id, p_local_date, v_as_of),
     v_invalidated,
-    v_workout,
-    v_water,
-    v_reading,
-    case when v_invalidated or not v_eligible then false else v_diet end,
+    case when v_invalidated or not v_eligible then 0 else v_met_count end,
+    case when v_invalidated or not v_eligible then 0 else v_total_count end,
     case
-      when v_invalidated or not v_eligible then 0
-      else v_met_count
-    end,
-    jsonb_build_object(
-      'workout', jsonb_build_object(
-        'amount', v_workout,
-        'target', 45,
-        'unit', 'minutes',
-        'markedDone',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_workout_done
-        end,
-        'met',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_workout >= 45 or v_workout_done
-        end
-      ),
-      'water', jsonb_build_object(
-        'amount', v_water,
-        'target', 2000,
-        'unit', 'ml',
-        'markedDone',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_water_done
-        end,
-        'met',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_water >= 2000 or v_water_done
-        end
-      ),
-      'reading', jsonb_build_object(
-        'amount', v_reading,
-        'target', 10,
-        'unit', 'pages',
-        'markedDone',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_reading_done
-        end,
-        'met',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_reading >= 10 or v_reading_done
-        end
-      ),
-      'diet', jsonb_build_object(
-        'target', 1,
-        'unit', 'attestation',
-        'met',
-        case
-          when v_invalidated or not v_eligible then false
-          else v_diet
-        end
-      )
-    );
+      when v_invalidated or not v_eligible then '[]'::jsonb
+      else v_goals
+    end;
 end;
 $$;
 
@@ -247,11 +204,8 @@ returns table (
   status text,
   editable boolean,
   invalidated boolean,
-  workout_amount bigint,
-  water_amount bigint,
-  reading_amount bigint,
-  diet_met boolean,
   met_count integer,
+  total_count integer,
   goals jsonb
 )
 language plpgsql
@@ -361,11 +315,8 @@ returns table (
   status text,
   editable boolean,
   invalidated boolean,
-  workout_amount bigint,
-  water_amount bigint,
-  reading_amount bigint,
-  diet_met boolean,
   met_count integer,
+  total_count integer,
   goals jsonb
 )
 language plpgsql
@@ -442,8 +393,8 @@ $$;
 
 /*
  * Compatibility overloads keep the documented unprefixed RPC argument names
- * callable while the richer W2/W4 boundary uses the p_* names above. They
- * delegate to the same canonical implementation and never calculate locally.
+ * callable while the richer boundary uses the p_* names above. They delegate
+ * to the same canonical implementation and never calculate locally.
  */
 create or replace function public.get_day_rollup(
   user_id uuid,

@@ -1,5 +1,5 @@
--- Shared W2 database helpers. These functions are security-definer and never
--- trust a client-supplied actor id for mutations.
+-- Shared day-tracking database helpers. These functions are security-definer
+-- and never trust a client-supplied actor id for mutations.
 
 create or replace function private.day_is_editable(
   p_user_id uuid,
@@ -40,8 +40,9 @@ begin
     return false;
   end if;
 
-  -- Moderation owns day_overrides in a later migration. W2 remains usable
-  -- before that table exists and starts honoring it as soon as it is present.
+  -- Moderation owns day_overrides in a later migration. Day tracking remains
+  -- usable before that table exists and starts honoring it as soon as it is
+  -- present.
   if to_regclass('public.day_overrides') is not null then
     execute $query$
       select exists (
@@ -61,80 +62,14 @@ begin
 end;
 $$;
 
-create or replace function private.day_latest_diet_state(
-  p_user_id uuid,
-  p_local_date date,
-  p_as_of timestamptz default now()
-)
-returns boolean
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_state boolean;
-  v_as_of timestamptz := coalesce(p_as_of, now());
-begin
-  /*
-   * W3 may not have created posts yet. Dynamic SQL keeps W2 deployable on its
-   * own; once those tables exist, published post diet entries participate in
-   * the same deterministic latest-event ordering as quiet toggles.
-   */
-  if to_regclass('public.posts') is not null
-     and to_regclass('public.post_goal_entries') is not null then
-    execute $query$
-      select event.diet_value
-      from (
-        select delta.diet_value,
-               delta.created_at as event_at,
-               delta.id as event_id
-        from public.day_deltas as delta
-        where delta.user_id = $1
-          and delta.local_date = $2
-          and delta.goal_key = 'diet'
-          and delta.created_at <= $3
-
-        union all
-
-        select entry.diet_value,
-               coalesce(post.published_at, post.created_at) as event_at,
-               entry.id as event_id
-        from public.posts as post
-        join public.post_goal_entries as entry
-          on entry.post_id = post.id
-        where post.author_id = $1
-          and post.local_date = $2
-          and post.status = 'published'
-          and entry.required_goal_key = 'diet'
-          and entry.diet_value is true
-          and coalesce(post.published_at, post.created_at) <= $3
-      ) as event
-      order by event.event_at desc, event.event_id desc
-      limit 1
-    $query$
-    into v_state
-    using p_user_id, p_local_date, v_as_of;
-  else
-    select delta.diet_value
-    into v_state
-    from public.day_deltas as delta
-    where delta.user_id = p_user_id
-      and delta.local_date = p_local_date
-      and delta.goal_key = 'diet'
-      and delta.created_at <= v_as_of
-    order by delta.created_at desc, delta.id desc
-    limit 1;
-  end if;
-
-  return coalesce(v_state, false);
-end;
-$$;
-
+-- Latest manual "done" flag for one member/date/goal, folding in a signed
+-- boolean-shaped day_deltas row. Goal-id based, so it already covers every
+-- checkbox-shaped goal (including what used to be the dedicated diet toggle)
+-- with a single implementation.
 create or replace function private.day_latest_manual_done(
   p_user_id uuid,
   p_local_date date,
-  p_goal_key text,
+  p_goal_id uuid,
   p_as_of timestamptz default now()
 )
 returns boolean
@@ -149,7 +84,7 @@ as $$
       from public.day_deltas as delta
       where delta.user_id = p_user_id
         and delta.local_date = p_local_date
-        and delta.goal_key = p_goal_key
+        and delta.goal_id = p_goal_id
         and delta.manual_done is not null
         and delta.created_at <= coalesce(p_as_of, now())
       order by delta.created_at desc, delta.id desc
@@ -211,13 +146,62 @@ begin
 end;
 $$;
 
+-- Every current-model day_deltas row (goal_id is not null) must match the
+-- shape of the goal it references -- a signed amount for a numeric goal, a
+-- manual_done flag for a checkbox goal -- and the goal must belong to this
+-- member and still be active. This is the goal-id equivalent of
+-- private.validate_optional_goal_log, which enforced the same three things
+-- for the now-retired optional_goal_logs table.
+create or replace function private.validate_day_delta_goal()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, private
+as $$
+declare
+  v_goal_target numeric;
+  v_goal_active boolean;
+begin
+  if new.goal_id is null then
+    -- Legacy goal_key rows are never inserted by any current code path.
+    return new;
+  end if;
+
+  select goal.target_value, goal.active
+    into v_goal_target, v_goal_active
+  from public.goals as goal
+  where goal.id = new.goal_id
+    and goal.owner_id = new.user_id;
+
+  if not found then
+    raise exception 'GOAL_NOT_FOUND';
+  end if;
+
+  if not v_goal_active then
+    raise exception 'GOAL_ARCHIVED';
+  end if;
+
+  if v_goal_target is null then
+    if new.amount_int is not null or new.manual_done is null then
+      raise exception 'INVALID_GOAL_SHAPE';
+    end if;
+  else
+    if new.manual_done is not null or new.amount_int is null then
+      raise exception 'INVALID_GOAL_SHAPE';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
 revoke all on function private.day_is_editable(uuid, date, timestamptz)
   from public;
-revoke all on function private.day_latest_diet_state(uuid, date, timestamptz)
-  from public;
-revoke all on function private.day_latest_manual_done(uuid, date, text, timestamptz)
+revoke all on function private.day_latest_manual_done(uuid, date, uuid, timestamptz)
   from public;
 revoke all on function private.day_assert_active_actor(uuid, date)
   from public;
 revoke all on function private.day_seed_default_containers()
+  from public;
+revoke all on function private.validate_day_delta_goal()
   from public;

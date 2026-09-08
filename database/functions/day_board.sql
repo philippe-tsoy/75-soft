@@ -1,14 +1,17 @@
+-- Signature change (fixed per-goal booleans -> met_count/total_count), so
+-- the old versions are dropped first; see day_rollup.sql for why.
+drop function if exists private.daily_board_score_unchecked(uuid, timestamptz);
+drop function if exists public.get_daily_board_score(uuid, timestamptz);
+drop function if exists public.get_member_daily_board_score(uuid, uuid, timestamptz);
+
 create or replace function private.daily_board_score_unchecked(
   p_user_id uuid,
   p_as_of_instant timestamptz default now()
 )
 returns table (
   score_date date,
-  goals_achieved_today integer,
-  workout_met boolean,
-  water_met boolean,
-  reading_met boolean,
-  diet_met boolean,
+  met_count integer,
+  total_count integer,
   eligible boolean
 )
 language plpgsql
@@ -47,20 +50,8 @@ begin
       else rollup.met_count
     end,
     case
-      when rollup.invalidated or rollup.status = 'unscored' then false
-      else coalesce((rollup.goals -> 'workout' ->> 'met')::boolean, false)
-    end,
-    case
-      when rollup.invalidated or rollup.status = 'unscored' then false
-      else coalesce((rollup.goals -> 'water' ->> 'met')::boolean, false)
-    end,
-    case
-      when rollup.invalidated or rollup.status = 'unscored' then false
-      else coalesce((rollup.goals -> 'reading' ->> 'met')::boolean, false)
-    end,
-    case
-      when rollup.invalidated or rollup.status = 'unscored' then false
-      else rollup.diet_met
+      when rollup.status = 'unscored' then 0
+      else rollup.total_count
     end,
     rollup.status <> 'unscored'
   from private.day_rollup_unchecked(
@@ -77,11 +68,8 @@ create or replace function public.get_daily_board_score(
 )
 returns table (
   score_date date,
-  goals_achieved_today integer,
-  workout_met boolean,
-  water_met boolean,
-  reading_met boolean,
-  diet_met boolean,
+  met_count integer,
+  total_count integer,
   eligible boolean
 )
 language plpgsql
@@ -118,11 +106,8 @@ create or replace function public.get_member_daily_board_score(
 )
 returns table (
   score_date date,
-  goals_achieved_today integer,
-  workout_met boolean,
-  water_met boolean,
-  reading_met boolean,
-  diet_met boolean,
+  met_count integer,
+  total_count integer,
   eligible boolean
 )
 language plpgsql
