@@ -4,35 +4,36 @@ import { useState, type FormEvent } from "react";
 
 import { Button, Input, Label } from "@/components/ui";
 import { Sheet } from "@/components/sheets/sheet";
-import {
-  createOptionalGoal,
-  OptionalGoalApiError,
-  updateOptionalGoal,
-} from "@/components/optional-goals/api";
-import type { OptionalGoalCreateInput } from "@/features/optional-goals/types";
-import type { OptionalGoalDTO } from "@/lib/types";
-import { MAX_OPTIONAL_GOAL_NAME_CHARACTERS } from "@/lib/config/75-soft";
+import { GoalApiError, createGoal, updateGoal } from "@/components/goals/api";
+import type { GoalCreateInput } from "@/features/goals/types";
+import type { GoalDTO, GoalTemplateDTO } from "@/lib/types";
+import { MAX_GOAL_NAME_CHARACTERS } from "@/lib/config/75-soft";
 import { MutationStatus } from "@/components/feedback";
-import { optionalGoalInputSchema } from "@/lib/validation";
+import { goalInputSchema } from "@/lib/validation";
 
-interface OptionalGoalFormProps {
+interface GoalFormProps {
   open: boolean;
-  goal: OptionalGoalDTO | null;
+  goal: GoalDTO | null;
+  /** Suggestions shown above the form on a new (non-edit) goal. */
+  templates?: GoalTemplateDTO[];
   onClose: () => void;
-  onSaved: (goal: OptionalGoalDTO) => void | Promise<void>;
+  onSaved: (goal: GoalDTO) => void | Promise<void>;
 }
 
 type FormMode = "checkbox" | "numeric";
 
-export function OptionalGoalForm({
+export function GoalForm({
   open,
   goal,
+  templates = [],
   onClose,
   onSaved,
-}: OptionalGoalFormProps) {
+}: GoalFormProps) {
   const [name, setName] = useState(goal?.name ?? "");
   const [mode, setMode] = useState<FormMode>(
-    goal?.targetValue === null ? "checkbox" : "numeric",
+    goal?.targetValue === null || goal?.targetValue === undefined
+      ? "checkbox"
+      : "numeric",
   );
   const [targetValue, setTargetValue] = useState(
     goal?.targetValue === null || goal?.targetValue === undefined
@@ -40,10 +41,24 @@ export function OptionalGoalForm({
       : String(goal.targetValue),
   );
   const [unit, setUnit] = useState(goal?.unit ?? "");
+  const [isPrivate, setIsPrivate] = useState(goal?.isPrivate ?? false);
+  const [templateId, setTemplateId] = useState<string | null>(
+    goal?.templateId ?? null,
+  );
   const [status, setStatus] = useState<
     "idle" | "pending" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  function applyTemplate(template: GoalTemplateDTO) {
+    setName(template.name);
+    setMode(template.targetValue === null ? "checkbox" : "numeric");
+    setTargetValue(
+      template.targetValue === null ? "" : String(template.targetValue),
+    );
+    setUnit(template.unit ?? "");
+    setTemplateId(template.id);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,7 +70,7 @@ export function OptionalGoalForm({
       targetValue: numericTarget,
       unit: mode === "numeric" ? unit : null,
     };
-    const parsed = optionalGoalInputSchema.safeParse(candidate);
+    const parsed = goalInputSchema.safeParse(candidate);
 
     if (!parsed.success) {
       setStatus("error");
@@ -73,27 +88,29 @@ export function OptionalGoalForm({
       return;
     }
 
-    const input: OptionalGoalCreateInput = {
+    const input: GoalCreateInput = {
       name: parsed.data.name,
       targetValue: parsed.data.targetValue ?? null,
       unit: parsed.data.unit ?? null,
+      isPrivate,
+      templateId,
     };
 
     setStatus("pending");
 
     try {
       const saved = goal
-        ? await updateOptionalGoal(goal.id, input)
-        : await createOptionalGoal(input);
+        ? await updateGoal(goal.id, input)
+        : await createGoal(input);
       await onSaved(saved);
       setStatus("success");
       onClose();
     } catch (error) {
       setStatus("error");
       setErrorMessage(
-        error instanceof OptionalGoalApiError
+        error instanceof GoalApiError
           ? error.message
-          : "Could not save this optional goal. Try again.",
+          : "Could not save this goal. Try again.",
       );
     }
   }
@@ -103,21 +120,44 @@ export function OptionalGoalForm({
       className="sm:max-w-lg"
       onClose={onClose}
       open={open}
-      title={goal ? "Edit optional goal" : "Add optional goal"}
+      title={goal ? "Edit goal" : "Add a goal"}
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
+        {!goal && templates.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-foreground text-sm font-medium">
+              Start from a suggestion
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {templates.map((template) => (
+                <button
+                  className="border-border bg-card hover:bg-surface-accent focus-visible:ring-primary rounded-full border px-3 py-1.5 text-sm outline-none focus-visible:ring-2"
+                  key={template.id}
+                  onClick={() => applyTemplate(template)}
+                  type="button"
+                >
+                  {template.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="space-y-2">
-          <Label htmlFor="optional-goal-name">Name</Label>
+          <Label htmlFor="goal-name">Name</Label>
           <Input
-            aria-describedby="optional-goal-name-help"
-            id="optional-goal-name"
-            maxLength={MAX_OPTIONAL_GOAL_NAME_CHARACTERS}
-            onChange={(event) => setName(event.target.value)}
+            aria-describedby="goal-name-help"
+            id="goal-name"
+            maxLength={MAX_GOAL_NAME_CHARACTERS}
+            onChange={(event) => {
+              setName(event.target.value);
+              setTemplateId(null);
+            }}
             placeholder="Meditate"
             value={name}
           />
-          <p className="text-muted text-xs" id="optional-goal-name-help">
-            Keep this personal; optional goals never affect your required score.
+          <p className="text-muted text-xs" id="goal-name-help">
+            You can remove this goal later; existing history stays intact.
           </p>
         </div>
 
@@ -128,7 +168,7 @@ export function OptionalGoalForm({
           <label className="border-border bg-card flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm">
             <input
               checked={mode === "checkbox"}
-              name="optional-goal-mode"
+              name="goal-mode"
               onChange={() => setMode("checkbox")}
               type="radio"
             />
@@ -142,7 +182,7 @@ export function OptionalGoalForm({
           <label className="border-border bg-card flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm">
             <input
               checked={mode === "numeric"}
-              name="optional-goal-mode"
+              name="goal-mode"
               onChange={() => setMode("numeric")}
               type="radio"
             />
@@ -158,9 +198,9 @@ export function OptionalGoalForm({
         {mode === "numeric" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="optional-goal-target">Daily target</Label>
+              <Label htmlFor="goal-target">Daily target</Label>
               <Input
-                id="optional-goal-target"
+                id="goal-target"
                 inputMode="decimal"
                 min="0"
                 onChange={(event) => setTargetValue(event.target.value)}
@@ -171,9 +211,9 @@ export function OptionalGoalForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="optional-goal-unit">Unit</Label>
+              <Label htmlFor="goal-unit">Unit</Label>
               <Input
-                id="optional-goal-unit"
+                id="goal-unit"
                 maxLength={40}
                 onChange={(event) => setUnit(event.target.value)}
                 placeholder="minutes"
@@ -182,6 +222,21 @@ export function OptionalGoalForm({
             </div>
           </div>
         ) : null}
+
+        <label className="border-border bg-card flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm">
+          <input
+            checked={isPrivate}
+            onChange={(event) => setIsPrivate(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            <span className="block font-medium">Private</span>
+            <span className="text-muted block text-xs">
+              Still counts toward your own percentage and rank, but shows as
+              &quot;Secret goal&quot; to everyone else, including in Posts.
+            </span>
+          </span>
+        </label>
 
         {errorMessage ? (
           <p

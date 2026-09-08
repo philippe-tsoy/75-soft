@@ -13,30 +13,26 @@ import {
 } from "@/lib/validation";
 
 import type {
-  AmountGoalDoneToggleInput,
   ContainerCreateInput,
   ContainerUpdateInput,
   DayAmountInput,
   DayEntryInput,
   DayContainerInput,
-  DietToggleInput,
+  GoalDoneToggleInput,
 } from "./types";
-
-const amountGoalSchema = z.enum(["workout", "water", "reading"]);
-const amountUnitSchema = z.enum(["minutes", "ml", "l", "pages"]);
 
 export const dayAmountInputSchema = z
   .object({
-    goal: amountGoalSchema,
+    goalId: z.string().uuid(),
     amount: signedAmountSchema,
-    unit: amountUnitSchema.optional(),
+    unit: z.enum(["ml", "l"]).optional(),
     clientOperationId: operationIdSchema.optional(),
   })
   .strict();
 
 export const dayContainerInputSchema = z
   .object({
-    goal: z.literal("water"),
+    goalId: z.string().uuid(),
     containerId: z.string().uuid(),
     clientOperationId: operationIdSchema.optional(),
   })
@@ -47,13 +43,7 @@ export const dayEntryInputSchema = z.union([
   dayContainerInputSchema,
 ]);
 
-export const dietToggleInputSchema = z
-  .object({
-    clientOperationId: operationIdSchema.optional(),
-  })
-  .strict();
-
-export const amountGoalDoneToggleInputSchema = z
+export const goalDoneToggleInputSchema = z
   .object({
     clientOperationId: operationIdSchema.optional(),
   })
@@ -99,34 +89,19 @@ export function parseDayEntryInput(value: unknown): DayEntryInput {
   return parsed.data as DayEntryInput;
 }
 
-export function parseDietToggleInput(
-  value: unknown,
-): z.infer<typeof dietToggleInputSchema> {
-  const parsed = dietToggleInputSchema.safeParse(value);
+export function parseGoalIdPathSegment(value: string): string {
+  const parsed = z.string().uuid().safeParse(value);
   if (!parsed.success) {
-    throw zodValidationError("Invalid diet toggle", parsed.error);
+    throw validationError("Goal must be a valid id");
   }
 
   return parsed.data;
 }
 
-const amountGoalPathSchema = z.enum(["workout", "water", "reading"]);
-
-export function parseAmountGoalPathSegment(
-  value: string,
-): "workout" | "water" | "reading" {
-  const parsed = amountGoalPathSchema.safeParse(value);
-  if (!parsed.success) {
-    throw validationError("Goal must be workout, water, or reading");
-  }
-
-  return parsed.data;
-}
-
-export function parseAmountGoalDoneToggleInput(
+export function parseGoalDoneToggleInput(
   value: unknown,
-): z.infer<typeof amountGoalDoneToggleInputSchema> {
-  const parsed = amountGoalDoneToggleInputSchema.safeParse(value);
+): z.infer<typeof goalDoneToggleInputSchema> {
+  const parsed = goalDoneToggleInputSchema.safeParse(value);
   if (!parsed.success) {
     throw zodValidationError("Invalid goal toggle", parsed.error);
   }
@@ -194,40 +169,32 @@ export function resolveClientOperationId(
   return requireClientOperationId(request);
 }
 
+/**
+ * The ledger only ever stores a plain integer; "unit" here is purely the
+ * ml<->l input convenience (a goal's own display unit lives on the goal
+ * row, not the delta). Liters convert to whole ml; anything else must
+ * already be a whole number.
+ */
 export function normalizeDayAmount(input: DayAmountInput): DayAmountInput {
-  if (input.goal === "water") {
-    const unit = input.unit ?? "ml";
-
-    if (unit !== "ml" && unit !== "l") {
-      throw validationError("Water entries must use ml or l");
-    }
-
+  if (input.unit === "l" || input.unit === "ml") {
     try {
       return {
         ...input,
-        amount: normalizeWaterAmount(input.amount, unit),
+        amount: normalizeWaterAmount(input.amount, input.unit),
         unit: "ml",
       };
     } catch {
       throw validationError(
-        "Water amount must resolve to a nonzero whole ml value",
+        "Amount must resolve to a nonzero whole ml value",
       );
     }
   }
 
-  const expectedUnit = input.goal === "workout" ? "minutes" : "pages";
-  if (input.unit !== undefined && input.unit !== expectedUnit) {
-    throw validationError(`${input.goal} entries must use ${expectedUnit}`);
-  }
-
   if (!Number.isInteger(input.amount)) {
-    throw validationError(`${input.goal} entries must be whole numbers`);
+    throw validationError("Amount must be a whole number");
   }
 
-  return {
-    ...input,
-    unit: expectedUnit,
-  };
+  return input;
 }
 
 export function parseAndNormalizeDayEntry(
@@ -245,27 +212,14 @@ export function parseAndNormalizeDayEntry(
   };
 }
 
-export function parseAndResolveDietToggle(
+export function parseAndResolveGoalDoneToggle(
   value: unknown,
   request: Request,
-): DietToggleInput {
-  const input = parseDietToggleInput(value);
+  goalId: string,
+): GoalDoneToggleInput {
+  const input = parseGoalDoneToggleInput(value);
   return {
-    clientOperationId: resolveClientOperationId(
-      request,
-      input.clientOperationId,
-    ),
-  };
-}
-
-export function parseAndResolveAmountGoalDoneToggle(
-  value: unknown,
-  request: Request,
-  goal: "workout" | "water" | "reading",
-): AmountGoalDoneToggleInput {
-  const input = parseAmountGoalDoneToggleInput(value);
-  return {
-    goal,
+    goalId,
     clientOperationId: resolveClientOperationId(
       request,
       input.clientOperationId,

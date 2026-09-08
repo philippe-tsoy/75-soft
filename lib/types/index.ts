@@ -1,6 +1,3 @@
-import { REQUIRED_GOAL_KEYS } from "@/lib/config/75-soft";
-
-export type RequiredGoalKey = (typeof REQUIRED_GOAL_KEYS)[number];
 export type MembershipRole = "member" | "admin";
 export type PostStatus = "pending" | "published" | "deleted" | "failed";
 export type DayDisplayState =
@@ -12,8 +9,6 @@ export type DayDisplayState =
   | "complete"
   | "missed";
 
-export type GoalDotState = Record<RequiredGoalKey, boolean>;
-
 export interface ProfileDTO {
   id: string;
   displayName: string;
@@ -23,22 +18,26 @@ export interface ProfileDTO {
 }
 
 /**
- * How a member logs workout/water/reading amounts on the day tracker:
- * a drag slider that runs 0 -> target, or the − / + button steppers.
+ * How a member logs their goal amounts on the day tracker: a drag slider
+ * that runs 0 -> target, or the − / + button steppers.
  */
 export type AmountInputMode = "slider" | "buttons";
 
 export const DEFAULT_AMOUNT_INPUT_MODE: AmountInputMode = "slider";
 
 export interface GoalProgressDTO {
+  id: string;
+  /** "Secret goal" when isPrivate is true and the viewer isn't the owner. */
+  name: string;
+  isPrivate: boolean;
   amount?: number;
   target?: number;
-  unit?: "minutes" | "ml" | "pages" | "attestation";
+  unit?: string | null;
   met: boolean;
   /**
-   * Manually toggled "done" state for an amount-based goal (workout, water,
-   * reading), independent of amount vs. target. `met` already folds this in;
-   * this is exposed separately so the UI can show the toggle's own state.
+   * Manually toggled "done" state for a numeric goal, independent of
+   * amount vs. target. `met` already folds this in; this is exposed
+   * separately so the UI can show the toggle's own state.
    */
   markedDone?: boolean;
 }
@@ -49,19 +48,16 @@ export interface DayRollupDTO {
   status: DayDisplayState;
   editable: boolean;
   invalidated: boolean;
-  goals: {
-    workout: GoalProgressDTO;
-    water: GoalProgressDTO;
-    reading: GoalProgressDTO;
-    diet: GoalProgressDTO;
-  };
+  /** Every goal the member had active on this date. */
+  goals: GoalProgressDTO[];
   metCount: number;
+  totalCount: number;
 }
 
 export interface DailyBoardDTO {
   scoreDate: string;
-  goalsAchievedToday: number;
-  goalStates: GoalDotState;
+  metCount: number;
+  totalCount: number;
 }
 
 export interface CalendarCellDTO {
@@ -80,29 +76,35 @@ export interface ContainerDTO {
   sortOrder: number;
 }
 
-export interface OptionalGoalDTO {
+export interface GoalDTO {
   id: string;
   name: string;
   targetValue: number | null;
   unit: string | null;
+  isPrivate: boolean;
+  active: boolean;
+  templateId: string | null;
+}
+
+export interface GoalTemplateDTO {
+  id: string;
+  name: string;
+  targetValue: number | null;
+  unit: string | null;
+}
+
+export interface GoalTemplateAdminDTO extends GoalTemplateDTO {
   active: boolean;
 }
 
-export type PostGoalDTO =
-  | {
-      kind: "required";
-      key: RequiredGoalKey;
-      amount: number | null;
-      unit: string | null;
-      met: boolean;
-    }
-  | {
-      kind: "optional";
-      optionalGoalId: string;
-      name: string;
-      value: number | null;
-      completed: boolean | null;
-    };
+export interface PostGoalDTO {
+  /** Null for a goal that no longer exists; the snapshot below survives it. */
+  goalId: string | null;
+  /** The goal's real name, or "Secret goal" if it was private at post time. */
+  name: string;
+  amount: number | null;
+  met: boolean;
+}
 
 export interface ReactionSummaryDTO {
   emoji: string;
@@ -118,13 +120,6 @@ export interface CommentDTO {
   canDelete: boolean;
 }
 
-export interface PostRequiredSnapshotDTO {
-  workout: { amount: number; met: boolean };
-  water: { amount: number; met: boolean };
-  reading: { amount: number; met: boolean };
-  diet: { met: boolean };
-}
-
 export interface PostDTO {
   id: string;
   author: ProfileDTO;
@@ -133,7 +128,6 @@ export interface PostDTO {
   goals: PostGoalDTO[];
   note: string | null;
   photoUrl: string | null;
-  requiredSnapshot: PostRequiredSnapshotDTO;
   teamId: string | null;
   reactions: ReactionSummaryDTO[];
   comments: CommentDTO[];
@@ -151,7 +145,8 @@ export interface AchievementDTO {
 export interface BoardEntryDTO {
   rank: number;
   user: ProfileDTO;
-  goalsAchievedToday: number;
+  metCount: number;
+  totalCount: number;
   scoreDate: string;
 }
 
@@ -167,7 +162,8 @@ export interface TeamRosterMemberDTO {
   userId: string;
   profile: ProfileDTO;
   individualPct: number;
-  goalsAchievedToday: number;
+  metCount: number;
+  totalCount: number;
 }
 
 export interface TeamSummaryDTO {

@@ -3,11 +3,10 @@ import { z } from "zod";
 import {
   MAX_COMMENT_CHARACTERS,
   MAX_DISPLAY_NAME_CHARACTERS,
+  MAX_GOAL_NAME_CHARACTERS,
   MAX_NOTE_CHARACTERS,
-  MAX_OPTIONAL_GOAL_NAME_CHARACTERS,
   MAX_REACTION_PALETTE_ENTRIES,
   MAX_WATER_CONTAINER_LABEL_CHARACTERS,
-  REQUIRED_GOAL_KEYS,
 } from "@/lib/config/75-soft";
 import { isValidIANATimezone, isValidISODate } from "@/lib/dates";
 
@@ -31,8 +30,6 @@ export function isSingleEmoji(value: string): boolean {
     normalized,
   );
 }
-
-export const requiredGoalKeySchema = z.enum(REQUIRED_GOAL_KEYS);
 
 export const isoDateSchema = z
   .string()
@@ -97,11 +94,13 @@ export const containerInputSchema = z.object({
   volumeMl: z.number().int().positive().max(100_000),
 });
 
-export const optionalGoalInputSchema = z
+export const goalInputSchema = z
   .object({
-    name: z.string().trim().min(1).max(MAX_OPTIONAL_GOAL_NAME_CHARACTERS),
+    name: z.string().trim().min(1).max(MAX_GOAL_NAME_CHARACTERS),
     targetValue: z.number().finite().positive().nullable().optional(),
     unit: z.string().trim().min(1).max(40).nullable().optional(),
+    isPrivate: z.boolean().optional(),
+    templateId: z.string().uuid().nullable().optional(),
   })
   .superRefine((value, context) => {
     if (value.targetValue !== null && value.targetValue !== undefined) {
@@ -137,14 +136,11 @@ export const reactionPaletteSchema = z.object({
     ),
 });
 
-// Required-goal entries are no longer client-submittable: the server derives
-// required state from that date's rollup (see TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md
-// §4.6), so this only ever carries optional-goal selections. An empty array is
-// valid -- a post's required-goal snapshot and photo are never empty on their own.
+// A post attaches any of the member's own goals as a selection. An empty
+// array is valid -- a post's photo is never empty on its own.
 export const postGoalInputSchema = z
   .object({
-    kind: z.literal("optional"),
-    optionalGoalId: z.string().uuid(),
+    goalId: z.string().uuid(),
     value: z.number().finite().positive().nullable().optional(),
     completed: z.boolean().nullable().optional(),
   })
@@ -165,9 +161,7 @@ export const postGoalInputSchema = z
     const seen = new Set<string>();
 
     entries.forEach((entry, index) => {
-      const identity = `optional:${entry.optionalGoalId}`;
-
-      if (seen.has(identity)) {
+      if (seen.has(entry.goalId)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: [index],
@@ -175,7 +169,7 @@ export const postGoalInputSchema = z
         });
       }
 
-      seen.add(identity);
+      seen.add(entry.goalId);
     });
   });
 

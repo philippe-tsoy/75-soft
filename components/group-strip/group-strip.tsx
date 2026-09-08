@@ -11,7 +11,6 @@ import {
   UnauthorizedState,
 } from "@/components/feedback/async-state";
 import { Card, CardHeader, CardTitle } from "@/components/ui";
-import { GoalDots } from "@/components/group-strip/goal-dots";
 import type { GroupStripEntryDTO } from "@/features/board/types";
 
 interface GroupStripProps {
@@ -24,7 +23,7 @@ export function GroupStrip({ entries }: GroupStripProps) {
       <CardHeader className="mb-2">
         <CardTitle id="group-strip-title">Your group</CardTitle>
         <p className="text-muted text-sm">
-          Required challenges completed today by each member.
+          Goals completed today by each member.
         </p>
       </CardHeader>
 
@@ -44,10 +43,9 @@ export function GroupStrip({ entries }: GroupStripProps) {
                     {entry.user.displayName}
                   </p>
                 </div>
-                <GoalDots compact states={entry.goalDots} />
                 <p className="text-muted text-xs">
                   <span className="text-foreground font-semibold">
-                    {entry.goalsAchievedToday}/4
+                    {entry.metCount}/{entry.totalCount}
                   </span>{" "}
                   achieved ·{" "}
                   <time dateTime={entry.scoreDate}>{entry.scoreDate}</time>

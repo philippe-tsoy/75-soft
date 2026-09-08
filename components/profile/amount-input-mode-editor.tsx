@@ -79,7 +79,7 @@ export function AmountInputModeEditor({
       <CardHeader>
         <CardTitle id="amount-input-mode-title">Tracker layout</CardTitle>
         <p className="text-muted text-sm">
-          Choose how you log workout, water, and reading amounts on Today.
+          Choose how you log numeric goal amounts on Today.
         </p>
       </CardHeader>
 

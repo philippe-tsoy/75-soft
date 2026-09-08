@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 
 import { MemberAvatar } from "@/components/board/member-avatar";
+import { GoalTemplatesPanel } from "@/components/admin/goal-templates-panel";
 import { Sheet } from "@/components/sheets/sheet";
 import {
   Button,
@@ -175,7 +176,7 @@ function ConfirmationContent({
       "Rotate the invite code? The current code and all signup intents created from it will stop working immediately.";
     confirmLabel = "Rotate invite";
   } else if (confirmation.kind === "invalidate") {
-    message = `Invalidate ${confirmation.displayName}'s day on ${confirmation.localDate}? All four required challenges will become not met, the Board score will be zero, and posts will remain visible.`;
+    message = `Invalidate ${confirmation.displayName}'s day on ${confirmation.localDate}? All goals will become not met, the Board score will be zero, and posts will remain visible.`;
     confirmLabel = "Invalidate day";
   } else if (confirmation.kind === "remove") {
     message = `Remove ${confirmation.displayName} from the active group? Their future access will be blocked and historical posts will not be deleted automatically.`;
@@ -540,6 +541,8 @@ export function AdminDashboard({ initialData }: AdminDashboardProps) {
             <p className="text-muted text-sm">No active members found.</p>
           )}
         </Card>
+
+        <GoalTemplatesPanel />
 
         <Card>
           <CardHeader>

@@ -12,14 +12,14 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/feedback";
 import { Button } from "@/components/ui";
 import { DEFAULT_REACTION_PALETTE } from "@/lib/config/75-soft";
 import { queryKeys } from "@/lib/query-keys";
-import type { OptionalGoalDTO, PostDTO } from "@/lib/types";
+import type { GoalDTO, PostDTO } from "@/lib/types";
 
 import { PostCard } from "./post-card";
 import { PostComposer } from "./post-composer";
 
 interface FeedScreenProps {
-  optionalGoals: OptionalGoalDTO[];
-  optionalGoalsUnavailable?: boolean;
+  goals: GoalDTO[];
+  goalsUnavailable?: boolean;
   today: string;
   userId: string;
 }
@@ -70,8 +70,8 @@ async function fetchReactionPalette(): Promise<string[]> {
 }
 
 export function FeedScreen({
-  optionalGoals,
-  optionalGoalsUnavailable = false,
+  goals,
+  goalsUnavailable = false,
   today,
   userId,
 }: FeedScreenProps) {
@@ -118,15 +118,14 @@ export function FeedScreen({
         </Button>
       </div>
 
-      {optionalGoalsUnavailable ? (
+      {goalsUnavailable ? (
         <div
           className="border-border bg-surface-accent rounded-2xl border p-3 text-sm"
           role="status"
         >
           <p className="font-semibold">Some post helpers are unavailable.</p>
           <p className="text-muted mt-1">
-            You can still publish required challenges. Refresh later to load
-            optional goals.
+            You can still publish. Refresh later to attach goals to a post.
           </p>
         </div>
       ) : null}
@@ -168,10 +167,10 @@ export function FeedScreen({
       ) : null}
 
       <PostComposer
+        goals={goals}
         onClose={() => setComposerOpen(false)}
         onPosted={invalidateFeed}
         open={composerOpen}
-        optionalGoals={optionalGoals}
         today={today}
         userId={userId}
       />

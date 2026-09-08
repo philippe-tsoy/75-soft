@@ -7,17 +7,6 @@ import {
   getYesterday,
   isEditableDate,
 } from "@/lib/dates";
-import {
-  calculateDailyBoardScore,
-  deriveDayStatus,
-  deriveGoalStates,
-  rankDailyBoard,
-} from "@/lib/scoring";
-import {
-  allMetGoalStates,
-  emptyGoalStates,
-  goldenScoringFixtures,
-} from "@/tests/fixtures/75-soft";
 
 describe("W8 scoring and timezone regressions", () => {
   it("changes dates at each member's local midnight", () => {
@@ -106,109 +95,5 @@ describe("W8 scoring and timezone regressions", () => {
         timeStyle: "short",
       }),
     ).toContain("9/2/26");
-  });
-
-  it("applies canonical units and thresholds without double counting", () => {
-    const states = deriveGoalStates({
-      workoutMinutes: 15 + 30,
-      waterMl: 1_000 + 1_000,
-      readingPages: 10,
-      dietAttested: true,
-    });
-
-    expect(states).toEqual(allMetGoalStates);
-    expect(
-      calculateDailyBoardScore({
-        activeMember: true,
-        localDate: goldenScoringFixtures.firstCohortDay.localDate,
-        joinLocalDate: "2026-09-01",
-        goalStates: states,
-      }).goalsAchievedToday,
-    ).toBe(4);
-  });
-
-  it("resets the Board at local midnight and excludes late joiners", () => {
-    const previousDate = calculateDailyBoardScore({
-      activeMember: true,
-      localDate: goldenScoringFixtures.localMidnight.previousDate,
-      joinLocalDate: "2026-09-01",
-      goalStates: allMetGoalStates,
-    });
-    const nextDate = calculateDailyBoardScore({
-      activeMember: true,
-      localDate: goldenScoringFixtures.localMidnight.nextDate,
-      joinLocalDate: "2026-09-01",
-      goalStates: emptyGoalStates,
-    });
-    const preJoin = calculateDailyBoardScore({
-      activeMember: true,
-      localDate: goldenScoringFixtures.lateJoiner.preJoinDate,
-      joinLocalDate: goldenScoringFixtures.lateJoiner.joinLocalDate,
-      goalStates: allMetGoalStates,
-    });
-
-    expect(previousDate.goalsAchievedToday).toBe(4);
-    expect(nextDate.goalsAchievedToday).toBe(0);
-    expect(nextDate.scoreDate).toBe("2026-09-02");
-    expect(preJoin.eligible).toBe(false);
-    expect(preJoin.goalsAchievedToday).toBe(0);
-  });
-
-  it("masks every challenge on invalidation while preserving display semantics", () => {
-    const invalidated = calculateDailyBoardScore({
-      activeMember: true,
-      localDate: "2026-09-01",
-      joinLocalDate: "2026-09-01",
-      invalidated: true,
-      goalStates: allMetGoalStates,
-    });
-
-    expect(invalidated.goalStates).toEqual(emptyGoalStates);
-    expect(invalidated.goalsAchievedToday).toBe(0);
-    expect(
-      deriveDayStatus({
-        eligible: true,
-        isFuture: false,
-        isCurrentDay: true,
-        metCount: 0,
-      }),
-    ).toBe("open");
-    expect(
-      deriveDayStatus({
-        eligible: true,
-        isFuture: false,
-        isCurrentDay: false,
-        metCount: 0,
-      }),
-    ).toBe("missed");
-  });
-
-  it("uses competition ranking without a hidden tie-breaker", () => {
-    expect(
-      rankDailyBoard([
-        { userId: "member-a", goalsAchievedToday: 3, scoreDate: "2026-09-01" },
-        { userId: "member-b", goalsAchievedToday: 3, scoreDate: "2026-09-02" },
-        { userId: "member-c", goalsAchievedToday: 1, scoreDate: "2026-09-01" },
-      ]),
-    ).toEqual([
-      {
-        userId: "member-a",
-        goalsAchievedToday: 3,
-        scoreDate: "2026-09-01",
-        rank: 1,
-      },
-      {
-        userId: "member-b",
-        goalsAchievedToday: 3,
-        scoreDate: "2026-09-02",
-        rank: 1,
-      },
-      {
-        userId: "member-c",
-        goalsAchievedToday: 1,
-        scoreDate: "2026-09-01",
-        rank: 3,
-      },
-    ]);
   });
 });

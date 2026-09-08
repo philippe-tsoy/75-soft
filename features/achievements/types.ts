@@ -3,7 +3,6 @@ import type {
   CalendarCellDTO,
   DayRollupDTO,
   PostDTO,
-  RequiredGoalKey,
 } from "@/lib/types";
 
 export const ACHIEVEMENT_CODES = [
@@ -12,10 +11,8 @@ export const ACHIEVEMENT_CODES = [
   "FIRST_PHOTO",
   "DAY_75",
   "THREE_POSTS_ONE_DAY",
-  "WATER_BEFORE_NOON",
   "FULL_DAY_AFTER_MISS",
   "SEVEN_PHOTOS",
-  "WATER_EXACT_TARGET",
 ] as const;
 
 export type AchievementCode = (typeof ACHIEVEMENT_CODES)[number];
@@ -52,20 +49,6 @@ export interface AchievementPostEvidence {
   localDate: string;
   createdAt: string;
   hasPhoto: boolean;
-  requiredGoals: readonly RequiredGoalKey[];
-  invalidated?: boolean;
-}
-
-export interface AchievementWaterEvent {
-  id: string;
-  localDate: string;
-  createdAt: string;
-  amountMl: number;
-  /**
-   * W2/W3 adapters provide the member-local hour so achievement evaluation
-   * does not introduce a second timezone implementation.
-   */
-  localHour: number;
   invalidated?: boolean;
 }
 
@@ -82,7 +65,6 @@ export interface AchievementEvidence {
   currentLocalDate: string;
   currentDayNumber: number;
   posts: readonly AchievementPostEvidence[];
-  waterEvents: readonly AchievementWaterEvent[];
   days: readonly AchievementDayEvidence[];
 }
 
@@ -102,9 +84,6 @@ export interface AchievementPostAdapter {
   listPublishedAchievementEvidence(
     userId: string,
   ): Promise<readonly AchievementPostEvidence[]>;
-  listPublishedWaterEvents(
-    userId: string,
-  ): Promise<readonly AchievementWaterEvent[]>;
 }
 
 export interface AchievementEvidenceAdapter {

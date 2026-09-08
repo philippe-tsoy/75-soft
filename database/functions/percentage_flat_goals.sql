@@ -232,6 +232,94 @@ begin
 end;
 $$;
 
+-- get_team_summary's roster jsonb read daily_board_score_unchecked's old
+-- goals_achieved_today column, which no longer exists (met_count/
+-- total_count replaced it); this is the only other caller of that shape.
+create or replace function public.get_team_summary(
+  p_viewer_id uuid,
+  p_team_id uuid,
+  p_as_of_instant timestamptz default now()
+)
+returns table (
+  team_id uuid,
+  name text,
+  created_by uuid,
+  member_count integer,
+  pct integer,
+  roster jsonb
+)
+language plpgsql
+stable
+security definer
+set search_path = public, private
+as $$
+declare
+  v_team public.teams%rowtype;
+  v_pct record;
+  v_roster jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if p_viewer_id is null or auth.uid() <> p_viewer_id then
+    raise exception 'FORBIDDEN';
+  end if;
+
+  if not private.is_active_member(p_viewer_id) then
+    raise exception 'FORBIDDEN';
+  end if;
+
+  select * into v_team
+  from public.teams
+  where id = p_team_id
+    and cohort_id = private.active_cohort_id();
+
+  if not found then
+    raise exception 'NOT_FOUND';
+  end if;
+
+  select * into v_pct
+  from private.team_percentage_unchecked(p_team_id, p_as_of_instant);
+
+  select coalesce(jsonb_agg(member_row order by member_row->>'userId'), '[]'::jsonb)
+  into v_roster
+  from (
+    select jsonb_build_object(
+      'userId', membership.user_id,
+      'individualPct', member_pct.pct,
+      'metCount', board.met_count,
+      'totalCount', board.total_count
+    ) as member_row
+    from public.team_memberships as membership
+    cross join lateral private.member_percentage_unchecked(
+      membership.user_id,
+      p_as_of_instant
+    ) as member_pct
+    cross join lateral private.daily_board_score_unchecked(
+      membership.user_id,
+      p_as_of_instant
+    ) as board
+    where membership.team_id = p_team_id
+      and membership.left_at is null
+  ) as members(member_row);
+
+  return query
+  select
+    v_team.id,
+    v_team.name,
+    v_team.created_by,
+    v_pct.member_count,
+    v_pct.pct,
+    v_roster;
+end;
+$$;
+
+revoke all on function public.get_team_summary(uuid, uuid, timestamptz)
+  from public;
+grant execute on function public.get_team_summary(uuid, uuid, timestamptz)
+  to authenticated;
+
 revoke all on function private.member_percentage_unchecked(uuid, timestamptz)
   from public;
 revoke all on function private.global_percentage_unchecked(timestamptz)

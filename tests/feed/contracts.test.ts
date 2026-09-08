@@ -37,7 +37,12 @@ describe("W3 feed contracts", () => {
     formData.set("localDate", "today");
     formData.set(
       "goals",
-      JSON.stringify([{ kind: "required", key: "workout", amount: 45 }]),
+      JSON.stringify([
+        {
+          goalId: "00000000-0000-0000-0000-000000000030",
+          value: 45,
+        },
+      ]),
     );
     formData.set("note", "  Strong finish  ");
     formData.set("clientOperationId", operationId);
@@ -73,7 +78,7 @@ describe("W3 feed contracts", () => {
     ).toThrow();
   });
 
-  it("maps optional-only entries without exposing private goal sources", () => {
+  it("maps entries without exposing private goal sources", () => {
     const goal = toPostGoalDTO({
       id: "00000000-0000-0000-0000-000000000020",
       post_id: "00000000-0000-0000-0000-000000000021",
@@ -84,15 +89,15 @@ describe("W3 feed contracts", () => {
       diet_value: null,
       optional_value: 10,
       optional_completed: null,
+      met: true,
       created_at: "2026-09-01T12:00:00.000Z",
     });
 
     expect(goal).toEqual({
-      kind: "optional",
-      optionalGoalId: "00000000-0000-0000-0000-000000000022",
+      goalId: "00000000-0000-0000-0000-000000000022",
       name: "Meditate",
-      value: 10,
-      completed: null,
+      amount: 10,
+      met: true,
     });
     expect(JSON.stringify(goal)).not.toContain("owner_id");
   });
@@ -135,7 +140,15 @@ describe("W3 feed contracts", () => {
   it("uses the frozen server media boundary", () => {
     const formData = new FormData();
     formData.set("localDate", "today");
-    formData.set("goals", JSON.stringify([{ kind: "required", key: "diet" }]));
+    formData.set(
+      "goals",
+      JSON.stringify([
+        {
+          goalId: "00000000-0000-0000-0000-000000000030",
+          completed: true,
+        },
+      ]),
+    );
     formData.set(
       "photo",
       new File([new Uint8Array(MAX_POST_PHOTO_BYTES + 1)], "too-big.png", {

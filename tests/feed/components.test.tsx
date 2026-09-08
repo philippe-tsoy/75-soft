@@ -22,13 +22,28 @@ const incompleteDayPayload: DayRollupDTO = {
   status: "in_progress",
   editable: true,
   invalidated: false,
-  goals: {
-    workout: { amount: 15, target: 45, unit: "minutes", met: false },
-    water: { amount: 2_000, target: 2_000, unit: "ml", met: true },
-    reading: { amount: 10, target: 10, unit: "pages", met: true },
-    diet: { target: 1, unit: "attestation", met: false },
-  },
-  metCount: 2,
+  goals: [
+    {
+      id: "00000000-0000-0000-0000-000000000030",
+      name: "Workout",
+      isPrivate: false,
+      amount: 15,
+      target: 45,
+      unit: "minutes",
+      met: false,
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000031",
+      name: "Water",
+      isPrivate: false,
+      amount: 2_000,
+      target: 2_000,
+      unit: "ml",
+      met: true,
+    },
+  ],
+  metCount: 1,
+  totalCount: 2,
 };
 
 const completeDayPayload: DayRollupDTO = {
@@ -37,13 +52,28 @@ const completeDayPayload: DayRollupDTO = {
   status: "complete",
   editable: true,
   invalidated: false,
-  goals: {
-    workout: { amount: 45, target: 45, unit: "minutes", met: true },
-    water: { amount: 2_000, target: 2_000, unit: "ml", met: true },
-    reading: { amount: 10, target: 10, unit: "pages", met: true },
-    diet: { target: 1, unit: "attestation", met: true },
-  },
-  metCount: 4,
+  goals: [
+    {
+      id: "00000000-0000-0000-0000-000000000030",
+      name: "Workout",
+      isPrivate: false,
+      amount: 45,
+      target: 45,
+      unit: "minutes",
+      met: true,
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000031",
+      name: "Water",
+      isPrivate: false,
+      amount: 2_000,
+      target: 2_000,
+      unit: "ml",
+      met: true,
+    },
+  ],
+  metCount: 2,
+  totalCount: 2,
 };
 
 function mockFetchForDay(dayPayload: DayRollupDTO, postStatus = 201) {
@@ -72,10 +102,10 @@ function renderComposer(
   return render(
     <QueryProvider>
       <PostComposer
+        goals={[]}
         onClose={vi.fn()}
         onPosted={vi.fn()}
         open
-        optionalGoals={[]}
         today={TODAY}
         userId={USER_ID}
         {...props}
@@ -95,21 +125,14 @@ const post: PostDTO = {
   createdAt: "2026-09-01T12:00:00.000Z",
   goals: [
     {
-      kind: "required",
-      key: "workout",
+      goalId: "00000000-0000-0000-0000-000000000030",
+      name: "Workout",
       amount: 45,
-      unit: "minutes",
       met: true,
     },
   ],
   note: "Good work",
   photoUrl: null,
-  requiredSnapshot: {
-    workout: { amount: 45, met: true },
-    water: { amount: 2000, met: true },
-    reading: { amount: 10, met: true },
-    diet: { met: true },
-  },
   teamId: null,
   reactions: [],
   comments: [],
@@ -161,22 +184,25 @@ describe("W3 feed components", () => {
     ).toBe(false);
   });
 
-  it("submits an optional-goal post with a retry-stable operation id and no required-goal entries", async () => {
+  it("submits a post with an attached checkbox goal and a retry-stable operation id", async () => {
     const fetchMock = mockFetchForDay(completeDayPayload);
     renderComposer({
-      optionalGoals: [
+      goals: [
         {
           id: "00000000-0000-0000-0000-000000000010",
           name: "Meditate",
           targetValue: null,
           unit: null,
+          isPrivate: false,
           active: true,
+          templateId: null,
         },
       ],
     });
     await screen.findByText(/today.s results/i);
 
     fireEvent.click(screen.getByRole("button", { name: /meditate/i }));
+    fireEvent.click(screen.getByLabelText("Completed"));
     fireEvent.change(screen.getByLabelText("Photo"), {
       target: {
         files: [new File(["img"], "photo.png", { type: "image/png" })],
@@ -197,8 +223,8 @@ describe("W3 feed components", () => {
     const body = init?.body as FormData;
     const operationId = body.get("clientOperationId");
     const goals = JSON.parse(String(body.get("goals"))) as Array<{
-      kind: string;
-      optionalGoalId: string;
+      goalId: string;
+      completed: boolean;
     }>;
 
     expect(operationId).toMatch(
@@ -209,9 +235,8 @@ describe("W3 feed components", () => {
     ).toBe(operationId);
     expect(goals).toEqual([
       {
-        kind: "optional",
-        optionalGoalId: "00000000-0000-0000-0000-000000000010",
-        completed: false,
+        goalId: "00000000-0000-0000-0000-000000000010",
+        completed: true,
       },
     ]);
     expect(body.get("photo")).toBeInstanceOf(File);

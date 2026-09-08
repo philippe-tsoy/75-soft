@@ -1,46 +1,47 @@
-import { countMetGoals, deriveDayStatus } from "@/lib/scoring";
+import { deriveDayStatus } from "@/lib/scoring";
 import type { DayRollupDTO, GoalProgressDTO } from "@/lib/types";
 
-type AmountGoal = "workout" | "water" | "reading";
-
-function withGoalStates(
+function withGoals(
   day: DayRollupDTO,
-  goalStates: DayRollupDTO["goals"],
+  goals: GoalProgressDTO[],
   today: string,
 ): DayRollupDTO {
-  const metCount = countMetGoals({
-    workout: goalStates.workout.met,
-    water: goalStates.water.met,
-    reading: goalStates.reading.met,
-    diet: goalStates.diet.met,
-  });
+  const metCount = goals.filter((goal) => goal.met).length;
+  const totalCount = goals.length;
 
   return {
     ...day,
-    goals: goalStates,
+    goals,
     metCount,
+    totalCount,
     status: deriveDayStatus({
       eligible: day.status !== "unscored",
       isFuture: day.status === "future",
       isCurrentDay: day.localDate === today,
       metCount,
+      totalCount,
     }),
   };
 }
 
 /**
  * Merges a single goal's confirmed (or reverted) state into a day snapshot
- * and recomputes metCount/status from the result. Used instead of replacing
- * the whole day so that a response or rollback for one goal never clobbers
- * another goal's independently in-flight optimistic update.
+ * and recomputes metCount/totalCount/status from the result. Used instead
+ * of replacing the whole day so that a response or rollback for one goal
+ * never clobbers another goal's independently in-flight optimistic update.
  */
 export function withGoalState(
   day: DayRollupDTO,
-  goal: keyof DayRollupDTO["goals"],
+  goalId: string,
   goalProgress: GoalProgressDTO,
   today: string,
 ): DayRollupDTO {
-  return withGoalStates(day, { ...day.goals, [goal]: goalProgress }, today);
+  const exists = day.goals.some((goal) => goal.id === goalId);
+  const goals = exists
+    ? day.goals.map((goal) => (goal.id === goalId ? goalProgress : goal))
+    : [...day.goals, goalProgress];
+
+  return withGoals(day, goals, today);
 }
 
 /**
@@ -65,7 +66,7 @@ export type AmountFillResolution =
   | { action: "locked" };
 
 /**
- * Decides what the checkmark's fill/undo shortcut does for an amount goal.
+ * Decides what the checkmark's fill/undo shortcut does for a numeric goal.
  * Below the target it fills to the target and hands back the amount to
  * remember; at or above the target it either reverts to a remembered
  * amount (the fill's own undo) or is locked (the target was reached by
@@ -89,7 +90,7 @@ export function resolveAmountFill(
 
 export function applyOptimisticAmount(
   day: DayRollupDTO,
-  goal: AmountGoal,
+  goalId: string,
   amount: number,
   today: string,
 ): DayRollupDTO {
@@ -97,69 +98,52 @@ export function applyOptimisticAmount(
     return day;
   }
 
-  const progress = day.goals[goal];
+  const progress = day.goals.find((goal) => goal.id === goalId);
+  if (!progress) {
+    return day;
+  }
+
   const nextAmount = Math.max(0, (progress.amount ?? 0) + amount);
 
-  return withGoalStates(
+  return withGoalState(
     day,
+    goalId,
     {
-      ...day.goals,
-      [goal]: {
-        ...progress,
-        amount: nextAmount,
-        met:
-          nextAmount >= (progress.target ?? Number.POSITIVE_INFINITY) ||
-          Boolean(progress.markedDone),
-      },
+      ...progress,
+      amount: nextAmount,
+      met:
+        nextAmount >= (progress.target ?? Number.POSITIVE_INFINITY) ||
+        Boolean(progress.markedDone),
     },
     today,
   );
 }
 
-export function applyOptimisticAmountGoalDone(
+export function applyOptimisticGoalDone(
   day: DayRollupDTO,
-  goal: AmountGoal,
+  goalId: string,
   today: string,
 ): DayRollupDTO {
   if (!day.editable) {
     return day;
   }
 
-  const progress = day.goals[goal];
+  const progress = day.goals.find((goal) => goal.id === goalId);
+  if (!progress) {
+    return day;
+  }
+
   const nextMarkedDone = !progress.markedDone;
 
-  return withGoalStates(
+  return withGoalState(
     day,
+    goalId,
     {
-      ...day.goals,
-      [goal]: {
-        ...progress,
-        markedDone: nextMarkedDone,
-        met:
-          (progress.amount ?? 0) >=
-            (progress.target ?? Number.POSITIVE_INFINITY) || nextMarkedDone,
-      },
-    },
-    today,
-  );
-}
-
-export function applyOptimisticDiet(
-  day: DayRollupDTO,
-  today: string,
-): DayRollupDTO {
-  if (!day.editable) {
-    return day;
-  }
-
-  return withGoalStates(
-    day,
-    {
-      ...day.goals,
-      diet: {
-        ...day.goals.diet,
-        met: !day.goals.diet.met,
-      },
+      ...progress,
+      markedDone: nextMarkedDone,
+      met:
+        (progress.amount ?? 0) >= (progress.target ?? Number.POSITIVE_INFINITY) ||
+        nextMarkedDone,
     },
     today,
   );

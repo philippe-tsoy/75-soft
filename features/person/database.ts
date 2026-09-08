@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { COHORT_START_DATE, isRequiredGoalKey } from "@/lib/config/75-soft";
+import { COHORT_START_DATE } from "@/lib/config/75-soft";
 import { getMemberLocalDate } from "@/lib/dates";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
@@ -161,68 +161,25 @@ function normalizeComment(value: unknown): CommentDTO | null {
 
 function normalizePostGoal(value: unknown): PostGoalDTO | null {
   const row = isRecord(value) ? value : {};
-  const kind = stringAt(row, "kind");
-
-  if (kind === "required") {
-    const key = stringAt(row, "key", "requiredGoalKey", "required_goal_key");
-    if (!key || !isRequiredGoalKey(key)) {
-      return null;
-    }
-
-    return {
-      kind,
-      key,
-      amount: numberAt(row, "amount", "amountInt", "amount_int") ?? null,
-      unit: stringAt(row, "unit") ?? null,
-      met: booleanAt(row, "met") ?? false,
-    };
+  // Legacy rows from before the flat-goals model carried `kind: "required"`;
+  // they were already display-only and nothing writes them anymore.
+  if (stringAt(row, "kind") === "required") {
+    return null;
   }
 
-  if (kind === "optional") {
-    const optionalGoalId = stringAt(row, "optionalGoalId", "optional_goal_id");
-    if (!optionalGoalId) {
-      return null;
-    }
-
-    return {
-      kind,
-      optionalGoalId,
-      name: stringAt(row, "name") ?? "Optional goal",
-      value: numberAt(row, "value", "optionalValue", "optional_value") ?? null,
-      completed:
-        booleanAt(
-          row,
-          "completed",
-          "optionalCompleted",
-          "optional_completed",
-        ) ?? null,
-    };
+  const goalId = stringAt(row, "goalId", "optionalGoalId", "optional_goal_id");
+  if (!goalId) {
+    return null;
   }
-
-  return null;
-}
-
-function normalizeRequiredSnapshot(value: unknown) {
-  const row = isRecord(value) ? value : {};
-  const goal = (key: string) => {
-    const entry = row[key];
-    return isRecord(entry) ? entry : {};
-  };
 
   return {
-    workout: {
-      amount: numberAt(goal("workout"), "amount") ?? 0,
-      met: booleanAt(goal("workout"), "met") ?? false,
-    },
-    water: {
-      amount: numberAt(goal("water"), "amount") ?? 0,
-      met: booleanAt(goal("water"), "met") ?? false,
-    },
-    reading: {
-      amount: numberAt(goal("reading"), "amount") ?? 0,
-      met: booleanAt(goal("reading"), "met") ?? false,
-    },
-    diet: { met: booleanAt(goal("diet"), "met") ?? false },
+    goalId,
+    name: stringAt(row, "name") ?? "Goal",
+    amount: numberAt(row, "amount", "value", "optionalValue", "optional_value") ?? null,
+    met:
+      booleanAt(row, "met") ??
+      booleanAt(row, "completed", "optionalCompleted", "optional_completed") ??
+      false,
   };
 }
 
@@ -256,9 +213,6 @@ function normalizePost(value: unknown): PostDTO | null {
     goals,
     note: stringAt(row, "note") ?? null,
     photoUrl: stringAt(row, "photoUrl", "photo_url") ?? null,
-    requiredSnapshot: normalizeRequiredSnapshot(
-      valueAt(row, "requiredSnapshot", "required_snapshot"),
-    ),
     teamId: stringAt(row, "teamId", "team_id") ?? null,
     reactions,
     comments,
@@ -294,9 +248,9 @@ function normalizePersonPayload(
 
   return {
     profile,
-    goalsAchievedToday:
-      numberAt(row, "goalsAchievedToday", "goals_achieved_today") ??
-      currentDay.metCount,
+    metCount: numberAt(row, "metCount", "met_count") ?? currentDay.metCount,
+    totalCount:
+      numberAt(row, "totalCount", "total_count") ?? currentDay.totalCount,
     // Percentage completion is not part of get_person_summary; getPersonSummary
     // fetches and overwrites this from get_member_percentage separately.
     individualPct: 0,
@@ -425,7 +379,8 @@ async function fallbackPersonSummary(
 
   const summary: PersonSummaryDTO = {
     profile,
-    goalsAchievedToday: score.goalsAchievedToday,
+    metCount: score.metCount,
+    totalCount: score.totalCount,
     individualPct: 0,
     calendar,
     currentDay,

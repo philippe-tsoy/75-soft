@@ -1,27 +1,4 @@
-import type { GoalDotState } from "@/lib/types";
-
 export const cohortStartDate = "2026-09-01";
-
-export const emptyGoalStates: GoalDotState = {
-  workout: false,
-  water: false,
-  reading: false,
-  diet: false,
-};
-
-export const threeMetGoalStates: GoalDotState = {
-  workout: true,
-  water: true,
-  reading: true,
-  diet: false,
-};
-
-export const allMetGoalStates: GoalDotState = {
-  workout: true,
-  water: true,
-  reading: true,
-  diet: true,
-};
 
 export const fixtureUsers = {
   admin: {
@@ -91,11 +68,11 @@ export const goldenScoringFixtures = {
   },
   threeMetToday: {
     localDate: "2026-09-01",
-    goalsAchievedToday: 3,
+    metCount: 3,
   },
   fourMetToday: {
     localDate: "2026-09-01",
-    goalsAchievedToday: 4,
+    metCount: 4,
   },
   lateJoiner: {
     joinLocalDate: "2026-09-04",

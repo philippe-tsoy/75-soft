@@ -9,7 +9,6 @@ import {
   createInviteRecord,
   decryptInviteCode,
 } from "@/features/admin/invite";
-import { INVALIDATED_GOAL_STATES } from "@/features/admin/types";
 import { hashInviteCode } from "@/features/auth/invite-intent";
 import { requireAdmin } from "@/lib/auth/access";
 import {
@@ -99,7 +98,7 @@ describe("admin authorization and invalidation contracts", () => {
       reason: "Manual review",
       createdBy: "00000000-0000-0000-0000-000000000001",
       createdAt: "2026-09-02T12:00:00.000Z",
-      forcedGoalStates: { ...INVALIDATED_GOAL_STATES },
+      forcedMet: false,
       dailyBoardScore: 0,
       postsRemainVisible: true,
     });

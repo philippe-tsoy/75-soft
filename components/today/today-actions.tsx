@@ -6,10 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PostComposer } from "@/components/feed/post-composer";
-import {
-  OptionalGoalsPanel,
-  fetchOptionalGoals,
-} from "@/components/optional-goals";
+import { fetchGoals } from "@/components/goals";
 import { Button, Card, CardHeader, CardTitle } from "@/components/ui";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -25,9 +22,9 @@ export function TodayActions({
   const queryClient = useQueryClient();
   const router = useRouter();
   const [composerOpen, setComposerOpen] = useState(false);
-  const optionalGoalsQuery = useQuery({
-    queryKey: queryKeys.optionalGoals("me"),
-    queryFn: fetchOptionalGoals,
+  const goalsQuery = useQuery({
+    queryKey: queryKeys.goals("me"),
+    queryFn: fetchGoals,
   });
 
   function handlePosted() {
@@ -64,14 +61,12 @@ export function TodayActions({
         </div>
       </Card>
 
-      <OptionalGoalsPanel localDate={localDate} />
-
       <PostComposer
         allowYesterday={allowYesterday}
+        goals={goalsQuery.data ?? []}
         onClose={() => setComposerOpen(false)}
         onPosted={handlePosted}
         open={composerOpen}
-        optionalGoals={optionalGoalsQuery.data ?? []}
         today={localDate}
         userId={userId}
       />

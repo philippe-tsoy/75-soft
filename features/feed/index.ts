@@ -6,7 +6,6 @@ export {
   parseFeedLimit,
 } from "./cursor";
 export {
-  requiredGoalLabel,
   summarizeReactions,
   toCommentDTO,
   toPostDTO,
@@ -21,7 +20,7 @@ export {
   type CommentRow,
   type FeedClient,
   type FeedPostRow,
-  type OptionalGoalRow,
+  type GoalRow,
   type PostGoalEntryRow,
   type ProfileRow,
   type ReactionRow,
@@ -40,7 +39,7 @@ export {
   getReactionPalette,
   getVisiblePost,
   listFeed,
-  listOwnedOptionalGoals,
+  listOwnedGoals,
   parseFeedRequest,
   removeReaction,
   setReaction,
@@ -52,7 +51,7 @@ export type {
   DeletePostResult,
   FeedCursor,
   FeedPage,
-  OwnedOptionalGoal,
+  OwnedGoal,
   ReactionResult,
 } from "./types";
 export {

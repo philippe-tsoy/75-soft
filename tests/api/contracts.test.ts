@@ -19,14 +19,12 @@ import {
   MAX_COMMENT_CHARACTERS,
   MAX_POST_PHOTO_BYTES,
   POST_PHOTO_MIME_TYPES,
-  REQUIRED_GOAL_KEYS,
 } from "@/lib/config/75-soft";
 import {
   getYesterday,
   isEditableDate,
   isScoredCalendarDate,
 } from "@/lib/dates";
-import { calculateDailyBoardScore } from "@/lib/scoring";
 import {
   buildPostPhotoPath,
   getImageExtension,
@@ -42,22 +40,17 @@ import {
   commentBodySchema,
   containerInputSchema,
   displayNameSchema,
+  goalInputSchema,
   normalizeWaterAmount,
   operationIdSchema,
-  optionalGoalInputSchema,
   postGoalInputSchema,
   positiveAmountSchema,
   profileUpdateSchema,
   reactionPaletteSchema,
-  requiredGoalKeySchema,
   timezoneSchema,
   waterAmountSchema,
 } from "@/lib/validation";
-import {
-  allMetGoalStates,
-  fixtureUsers,
-  goldenScoringFixtures,
-} from "@/tests/fixtures/75-soft";
+import { fixtureUsers, goldenScoringFixtures } from "@/tests/fixtures/75-soft";
 
 describe("API contract primitives", () => {
   describe("response envelopes and stable errors", () => {
@@ -179,22 +172,6 @@ describe("API contract primitives", () => {
   });
 
   describe("request validation", () => {
-    it("accepts only the canonical required goal keys", () => {
-      expect(REQUIRED_GOAL_KEYS).toEqual([
-        "workout",
-        "water",
-        "reading",
-        "diet",
-      ]);
-
-      for (const key of REQUIRED_GOAL_KEYS) {
-        expect(requiredGoalKeySchema.parse(key)).toBe(key);
-      }
-
-      expect(requiredGoalKeySchema.safeParse("optional").success).toBe(false);
-      expect(requiredGoalKeySchema.safeParse("Workout").success).toBe(false);
-    });
-
     it("rejects zero, negative, non-finite, and over-bound amounts", () => {
       for (const amount of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
         expect(positiveAmountSchema.safeParse(amount).success).toBe(false);
@@ -286,54 +263,44 @@ describe("API contract primitives", () => {
       expect(commentBodySchema.parse("  Nice work!  ")).toBe("Nice work!");
     });
 
-    it("accepts an empty selection and rejects required/duplicate/malformed post goals", () => {
-      const optionalGoalId = "00000000-0000-0000-0000-000000000010";
+    it("accepts an empty selection and rejects duplicate/malformed post goals", () => {
+      const goalId = "00000000-0000-0000-0000-000000000010";
 
-      // Required-goal entries are no longer client-submittable -- the server
-      // derives required state from the day's rollup instead, and a post is
-      // never "empty" once its required snapshot and photo are attached. See
-      // TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md §4.6.
       expect(postGoalInputSchema.safeParse([]).success).toBe(true);
       expect(
         postGoalInputSchema.safeParse([
           {
-            kind: "optional",
-            optionalGoalId,
+            goalId,
             completed: true,
           },
         ]).success,
       ).toBe(true);
       expect(
-        postGoalInputSchema.safeParse([
-          { kind: "required", key: "workout", amount: 30 },
-        ]).success,
-      ).toBe(false);
+        postGoalInputSchema.safeParse([{ goalId, value: 30 }]).success,
+      ).toBe(true);
       expect(
         postGoalInputSchema.safeParse([
-          { kind: "optional", optionalGoalId, completed: true },
-          { kind: "optional", optionalGoalId, completed: false },
+          { goalId, completed: true },
+          { goalId, completed: false },
         ]).success,
       ).toBe(false);
       expect(
         postGoalInputSchema.safeParse([
           {
-            kind: "optional",
-            optionalGoalId,
+            goalId,
             value: 10,
             completed: true,
           },
         ]).success,
       ).toBe(false);
       expect(
-        postGoalInputSchema.safeParse([
-          { kind: "optional", optionalGoalId },
-        ]).success,
+        postGoalInputSchema.safeParse([{ goalId }]).success,
       ).toBe(false);
     });
 
-    it("validates optional goal target pairs and ownership-independent shape", () => {
+    it("validates goal target pairs and ownership-independent shape", () => {
       expect(
-        optionalGoalInputSchema.parse({
+        goalInputSchema.parse({
           name: "Meditate",
           targetValue: 10,
           unit: "minutes",
@@ -343,11 +310,11 @@ describe("API contract primitives", () => {
         targetValue: 10,
         unit: "minutes",
       });
-      expect(optionalGoalInputSchema.parse({ name: "Stretch" })).toEqual({
+      expect(goalInputSchema.parse({ name: "Stretch" })).toMatchObject({
         name: "Stretch",
       });
       expect(
-        optionalGoalInputSchema.safeParse({
+        goalInputSchema.safeParse({
           name: "Meditate",
           targetValue: 10,
         }).success,
@@ -422,13 +389,25 @@ describe("API contract primitives", () => {
         status: "complete",
         editable: true,
         invalidated: false,
-        goals: {
-          workout: { amount: 45, target: 45, met: true, unit: "minutes" },
-          water: { amount: 2_000, target: 2_000, met: true, unit: "ml" },
-          reading: { amount: 10, target: 10, met: true, unit: "pages" },
-          diet: { met: true, target: 1, unit: "attestation" },
-        },
-        metCount: 4,
+        goals: [
+          {
+            id: "00000000-0000-0000-0000-000000000030",
+            name: "Workout",
+            isPrivate: false,
+            amount: 45,
+            target: 45,
+            unit: "minutes",
+            met: true,
+          },
+          {
+            id: "00000000-0000-0000-0000-000000000031",
+            name: "Secret goal",
+            isPrivate: true,
+            met: true,
+          },
+        ],
+        metCount: 2,
+        totalCount: 2,
       } satisfies DayRollupDTO;
       const post = {
         id: "00000000-0000-0000-0000-000000000021",
@@ -437,21 +416,14 @@ describe("API contract primitives", () => {
         createdAt: "2026-09-01T12:00:00.000Z",
         goals: [
           {
-            kind: "required",
-            key: "workout",
+            goalId: "00000000-0000-0000-0000-000000000030",
+            name: "Workout",
             amount: 45,
-            unit: "minutes",
             met: true,
           },
         ],
         note: null,
         photoUrl: null,
-        requiredSnapshot: {
-          workout: { amount: 45, met: true },
-          water: { amount: 2_000, met: true },
-          reading: { amount: 10, met: true },
-          diet: { met: true },
-        },
         teamId: null,
         reactions: [],
         comments: [],
@@ -460,7 +432,8 @@ describe("API contract primitives", () => {
       const boardEntry = {
         rank: 1,
         user: profile,
-        goalsAchievedToday: 4,
+        metCount: 2,
+        totalCount: 2,
         scoreDate: COHORT_START_DATE,
       } satisfies BoardEntryDTO;
 
@@ -474,19 +447,11 @@ describe("API contract primitives", () => {
 
       expect(post.photoUrl).toBeNull();
       expect(day.goals).toEqual(
-        expect.objectContaining({
-          workout: expect.any(Object),
-          water: expect.any(Object),
-          reading: expect.any(Object),
-          diet: expect.any(Object),
-        }),
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Workout", isPrivate: false }),
+          expect.objectContaining({ name: "Secret goal", isPrivate: true }),
+        ]),
       );
-      expect(calculateDailyBoardScore({
-        activeMember: true,
-        localDate: COHORT_START_DATE,
-        joinLocalDate: COHORT_START_DATE,
-        goalStates: allMetGoalStates,
-      }).goalsAchievedToday).toBe(4);
     });
 
     it("keeps dates date-only and instants UTC in DTO examples", () => {

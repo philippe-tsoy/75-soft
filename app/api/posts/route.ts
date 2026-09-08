@@ -5,7 +5,6 @@ import {
   ok,
   requireActiveMember,
 } from "@/lib/http";
-import type { DayRollupDTO } from "@/lib/types";
 
 import {
   createFeedClient,
@@ -18,17 +17,6 @@ import {
 import { createAchievementFeedAdapter } from "@/features/achievements/server-adapters";
 import type { AchievementClient } from "@/features/achievements/database";
 import { getMyTeam } from "@/features/teams/database";
-
-// A frozen, display-only recap of that date's rollup at publish time -- never
-// summed into scoring. See TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md §4.4.
-function buildRequiredSnapshot(day: DayRollupDTO): Record<string, unknown> {
-  return {
-    workout: { amount: day.goals.workout.amount ?? 0, met: day.goals.workout.met },
-    water: { amount: day.goals.water.amount ?? 0, met: day.goals.water.met },
-    reading: { amount: day.goals.reading.amount ?? 0, met: day.goals.reading.met },
-    diet: { met: day.goals.diet.met },
-  };
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,12 +59,20 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!existingDay || existingDay.metCount < 4) {
+    if (
+      !existingDay ||
+      existingDay.totalCount === 0 ||
+      existingDay.metCount < existingDay.totalCount
+    ) {
       throw new HttpError(
         422,
         "BUSINESS_RULE_VIOLATION",
-        "Finish today's required goals before posting",
-        { localDate, metCount: existingDay?.metCount ?? 0 },
+        "Finish today's goals before posting",
+        {
+          localDate,
+          metCount: existingDay?.metCount ?? 0,
+          totalCount: existingDay?.totalCount ?? 0,
+        },
       );
     }
 
@@ -91,7 +87,6 @@ export async function POST(request: Request) {
       goals: parsed.goals,
       note: parsed.note,
       photo: parsed.photo,
-      requiredSnapshot: buildRequiredSnapshot(existingDay),
       teamId: myTeam?.teamId ?? null,
       clientOperationId: parsed.clientOperationId,
       scoring,

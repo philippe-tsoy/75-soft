@@ -35,7 +35,6 @@ export {
   type AchievementResponseDTO,
   type AchievementToastDTO,
   type AchievementUnlockDTO,
-  type AchievementWaterEvent,
 } from "./types";
 export {
   evaluateAchievementsFromAction,

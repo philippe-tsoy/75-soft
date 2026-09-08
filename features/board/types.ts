@@ -2,7 +2,6 @@ import type {
   BoardEntryDTO,
   CalendarCellDTO,
   DayRollupDTO,
-  GoalDotState,
   ProfileDTO,
 } from "@/lib/types";
 
@@ -10,8 +9,8 @@ export interface GroupStripEntryDTO {
   user: ProfileDTO;
   localDate: string;
   dayNumber: number;
-  goalDots: GoalDotState;
-  goalsAchievedToday: number;
+  metCount: number;
+  totalCount: number;
   scoreDate: string;
 }
 
@@ -25,7 +24,8 @@ export interface BoardRpcRow {
 
 export interface PersonReadModel {
   profile: ProfileDTO;
-  goalsAchievedToday: number;
+  metCount: number;
+  totalCount: number;
   individualPct: number;
   calendar: CalendarCellDTO[];
   currentDay: DayRollupDTO;

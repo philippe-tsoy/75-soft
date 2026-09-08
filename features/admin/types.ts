@@ -1,12 +1,6 @@
-import type { DayRollupDTO, GoalDotState, MembershipRole } from "@/lib/types";
+import type { DayRollupDTO, MembershipRole } from "@/lib/types";
 
 export const ADMIN_INVALIDATION_KIND = "invalidated" as const;
-export const INVALIDATED_GOAL_STATES = {
-  workout: false,
-  water: false,
-  reading: false,
-  diet: false,
-} as const satisfies GoalDotState;
 
 export interface AdminInviteDTO {
   id: string;
@@ -33,7 +27,7 @@ export interface AdminInvalidationDTO {
   reason: string | null;
   createdBy: string;
   createdAt: string;
-  forcedGoalStates: GoalDotState;
+  forcedMet: false;
   dailyBoardScore: 0;
   postsRemainVisible: true;
 }

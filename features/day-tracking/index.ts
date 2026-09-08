@@ -8,6 +8,7 @@ export {
   type DayRollupRow,
   type DayTrackingClient,
   type DailyBoardScoreRow,
+  type GoalStateRow,
   type WaterContainerRow,
 } from "./database";
 export { DayApiError, requestDayApi, withOperationId } from "./client";
@@ -21,8 +22,7 @@ export { createDayTrackingMutationService } from "./mutations";
 export {
   amountDeltaTo,
   applyOptimisticAmount,
-  applyOptimisticDiet,
-  applyOptimisticAmountGoalDone,
+  applyOptimisticGoalDone,
   resolveAmountFill,
   withGoalState,
   type AmountFillResolution,
@@ -36,22 +36,19 @@ export {
 } from "./rollup-adapter";
 export { createDayTrackingServices } from "./server";
 export {
-  amountGoalDoneToggleInputSchema,
   containerPatchSchema,
   dayAmountInputSchema,
   dayContainerInputSchema,
   dayEntryInputSchema,
-  dietToggleInputSchema,
+  goalDoneToggleInputSchema,
   normalizeDayAmount,
-  parseAmountGoalDoneToggleInput,
-  parseAmountGoalPathSegment,
+  parseGoalDoneToggleInput,
+  parseGoalIdPathSegment,
   parseAndNormalizeDayEntry,
-  parseAndResolveAmountGoalDoneToggle,
-  parseAndResolveDietToggle,
+  parseAndResolveGoalDoneToggle,
   parseContainerCreateInput,
   parseContainerUpdateInput,
   parseDayEntryInput,
-  parseDietToggleInput,
   readJsonBody,
   resolveClientOperationId,
 } from "./validation";

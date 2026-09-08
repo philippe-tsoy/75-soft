@@ -34,9 +34,9 @@ export function BoardRow({ entry }: BoardRowProps) {
       </div>
       <p className="text-right text-sm font-semibold">
         <span className="block text-2xl leading-none tabular-nums">
-          {entry.goalsAchievedToday}
+          {entry.metCount}/{entry.totalCount}
         </span>
-        <span className="text-muted text-xs whitespace-nowrap">of 4 today</span>
+        <span className="text-muted text-xs whitespace-nowrap">today</span>
       </p>
     </Link>
   );

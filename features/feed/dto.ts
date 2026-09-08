@@ -1,27 +1,13 @@
-import {
-  READING_TARGET_PAGES,
-  REQUIRED_GOALS,
-  WATER_TARGET_ML,
-  WORKOUT_TARGET_MINUTES,
-} from "@/lib/config/75-soft";
 import type {
   CommentDTO,
   PostDTO,
   PostGoalDTO,
-  PostRequiredSnapshotDTO,
   ProfileDTO,
   ReactionSummaryDTO,
 } from "@/lib/types";
 
 import type { PostGoalEntryRow, ProfileRow, ReactionRow } from "./database";
 import type { HydratedPost } from "./types";
-
-const REQUIRED_GOAL_UNITS = {
-  workout: "minutes",
-  water: "ml",
-  reading: "pages",
-  diet: "attestation",
-} as const;
 
 function asNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined) {
@@ -43,48 +29,29 @@ export function toProfileDTO(
   };
 }
 
-function requiredGoalIsMet(entry: PostGoalEntryRow): boolean {
-  if (!entry.required_goal_key) {
-    return false;
-  }
-
-  if (entry.required_goal_key === "diet") {
-    return entry.diet_value === true;
-  }
-
-  const amount = entry.amount_int ?? 0;
-  switch (entry.required_goal_key) {
-    case "workout":
-      return amount >= WORKOUT_TARGET_MINUTES;
-    case "water":
-      return amount >= WATER_TARGET_ML;
-    case "reading":
-      return amount >= READING_TARGET_PAGES;
-  }
-}
-
 export function toPostGoalDTO(entry: PostGoalEntryRow): PostGoalDTO | null {
+  // Frozen legacy rows from before the flat-goals model; harmless to skip
+  // since they were already display-only and nothing writes them anymore.
   if (entry.required_goal_key) {
-    return {
-      kind: "required",
-      key: entry.required_goal_key,
-      amount:
-        entry.required_goal_key === "diet" ? null : (entry.amount_int ?? null),
-      unit: REQUIRED_GOAL_UNITS[entry.required_goal_key],
-      met: requiredGoalIsMet(entry),
-    };
+    return null;
   }
 
   if (!entry.optional_goal_id) {
     return null;
   }
 
+  const met =
+    entry.met !== null
+      ? entry.met
+      : entry.optional_completed !== null
+        ? entry.optional_completed
+        : false;
+
   return {
-    kind: "optional",
-    optionalGoalId: entry.optional_goal_id,
-    name: entry.optional_goal_name ?? "Optional goal",
-    value: asNumber(entry.optional_value),
-    completed: entry.optional_completed,
+    goalId: entry.optional_goal_id,
+    name: entry.optional_goal_name ?? "Goal",
+    amount: asNumber(entry.optional_value),
+    met,
   };
 }
 
@@ -153,30 +120,6 @@ export function toCommentDTO(
   };
 }
 
-function normalizeRequiredSnapshot(value: unknown): PostRequiredSnapshotDTO {
-  const record =
-    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-
-  const goal = (key: string): Record<string, unknown> => {
-    const entry = record[key];
-    return entry && typeof entry === "object"
-      ? (entry as Record<string, unknown>)
-      : {};
-  };
-  const amount = (key: string): number => {
-    const raw = goal(key).amount;
-    return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
-  };
-  const met = (key: string): boolean => goal(key).met === true;
-
-  return {
-    workout: { amount: amount("workout"), met: met("workout") },
-    water: { amount: amount("water"), met: met("water") },
-    reading: { amount: amount("reading"), met: met("reading") },
-    diet: { met: met("diet") },
-  };
-}
-
 export function toPostDTO(
   hydrated: HydratedPost,
   viewerId: string,
@@ -204,14 +147,9 @@ export function toPostDTO(
     goals,
     note: hydrated.row.note,
     photoUrl: hydrated.photoUrl,
-    requiredSnapshot: normalizeRequiredSnapshot(hydrated.row.required_snapshot),
     teamId: hydrated.row.team_id,
     reactions: summarizeReactions(hydrated.reactions, palette, viewerId),
     comments,
     canDelete: viewerIsAdmin || hydrated.row.author_id === viewerId,
   };
-}
-
-export function requiredGoalLabel(key: keyof typeof REQUIRED_GOALS): string {
-  return REQUIRED_GOALS[key].label;
 }

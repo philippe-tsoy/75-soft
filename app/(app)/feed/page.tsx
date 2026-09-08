@@ -1,7 +1,7 @@
 import { FeedScreen } from "@/components/feed";
 import { requireActiveMember } from "@/lib/auth/access";
 import { getMemberLocalDate } from "@/lib/dates";
-import { createFeedClient, listOwnedOptionalGoals } from "@/features/feed";
+import { createFeedClient, listOwnedGoals } from "@/features/feed";
 import { getCurrentProfile } from "@/features/profiles/service";
 
 export const dynamic = "force-dynamic";
@@ -13,17 +13,16 @@ export default async function FeedPage() {
     createFeedClient(),
   ]);
   const today = getMemberLocalDate(new Date(), profile.timezone ?? "UTC");
-  const [optionalGoalsResult] = await Promise.allSettled([
-    listOwnedOptionalGoals(client, access.user.id),
+  const [goalsResult] = await Promise.allSettled([
+    listOwnedGoals(client, access.user.id),
   ]);
 
-  const optionalGoals =
-    optionalGoalsResult.status === "fulfilled" ? optionalGoalsResult.value : [];
+  const goals = goalsResult.status === "fulfilled" ? goalsResult.value : [];
 
   return (
     <FeedScreen
-      optionalGoals={optionalGoals}
-      optionalGoalsUnavailable={optionalGoalsResult.status === "rejected"}
+      goals={goals}
+      goalsUnavailable={goalsResult.status === "rejected"}
       today={today}
       userId={access.user.id}
     />

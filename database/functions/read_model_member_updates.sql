@@ -1,5 +1,9 @@
 -- Forward-compatible W4 read-model updates for the W2/W6 member boundaries.
 
+-- Superseded by the identical definition in read_models_flat_goals.sql
+-- (\ir'd later, from 0018_flat_goals.sql) -- kept here too, matching, so
+-- this canonical file never reads as stale between the two \ir points on a
+-- fresh deploy.
 create or replace function private.w4_daily_score(
   p_user_id uuid,
   p_as_of_instant timestamptz
@@ -15,13 +19,8 @@ declare
 begin
   select jsonb_build_object(
     'scoreDate', value.score_date,
-    'goalsAchievedToday', value.goals_achieved_today,
-    'goalStates', jsonb_build_object(
-      'workout', value.workout_met,
-      'water', value.water_met,
-      'reading', value.reading_met,
-      'diet', value.diet_met
-    ),
+    'metCount', value.met_count,
+    'totalCount', value.total_count,
     'eligible', value.eligible
   )
   into score

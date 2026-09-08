@@ -10,7 +10,6 @@ import {
   asRpcClient,
   normalizeDailyBoardScore,
   normalizeProfile,
-  normalizeGoalStates,
 } from "./scoring-adapter";
 import type { BoardRpcRow, GroupStripEntryDTO } from "./types";
 
@@ -181,9 +180,8 @@ function boardEntryFromRow(
     userId: user.id,
     rank: numberAt(row, "rank") ?? index + 1,
     user,
-    goalsAchievedToday:
-      numberAt(row, "goalsAchievedToday", "goals_achieved_today") ??
-      score.goalsAchievedToday,
+    metCount: numberAt(row, "metCount", "met_count") ?? score.metCount,
+    totalCount: numberAt(row, "totalCount", "total_count") ?? score.totalCount,
     scoreDate: stringAt(row, "scoreDate", "score_date") ?? score.scoreDate,
   };
 }
@@ -197,10 +195,8 @@ function groupStripFromRow(row: BoardRpcRow): GroupStripEntryDTO {
     user,
     localDate,
     dayNumber: numberAt(row, "dayNumber", "day_number") ?? 0,
-    goalDots: normalizeGoalStates(row),
-    goalsAchievedToday:
-      numberAt(row, "goalsAchievedToday", "goals_achieved_today") ??
-      score.goalsAchievedToday,
+    metCount: numberAt(row, "metCount", "met_count") ?? score.metCount,
+    totalCount: numberAt(row, "totalCount", "total_count") ?? score.totalCount,
     scoreDate:
       stringAt(row, "scoreDate", "score_date") ?? score.scoreDate ?? localDate,
   };
@@ -221,7 +217,8 @@ export async function getBoardEntries(
       const entry = boardEntryFromRow(row, index);
       return {
         userId: entry.userId,
-        goalsAchievedToday: entry.goalsAchievedToday,
+        metCount: entry.metCount,
+        totalCount: entry.totalCount,
         scoreDate: entry.scoreDate,
       };
     }),
@@ -244,7 +241,8 @@ export async function getBoardEntries(
     return {
       rank: rankedEntry.rank,
       user: entry.user,
-      goalsAchievedToday: rankedEntry.goalsAchievedToday,
+      metCount: rankedEntry.metCount,
+      totalCount: rankedEntry.totalCount,
       scoreDate: rankedEntry.scoreDate,
     };
   });

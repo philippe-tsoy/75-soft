@@ -19,43 +19,31 @@ describe("common validation primitives", () => {
     expect(() => commentBodySchema.parse("a".repeat(257))).toThrow();
   });
 
-  it("accepts an empty selection and distinct optional-goal entries only", () => {
-    // Required-goal entries are no longer client-submittable -- the server
-    // derives required state from the day's rollup instead. See
-    // TEAMS_PERCENTAGE_AND_DAILY_PHOTO.md §4.6.
+  it("accepts an empty selection and distinct goal entries only", () => {
     expect(postGoalInputSchema.parse([])).toHaveLength(0);
 
     expect(
       postGoalInputSchema.parse([
         {
-          kind: "optional",
-          optionalGoalId: "00000000-0000-0000-0000-000000000001",
+          goalId: "00000000-0000-0000-0000-000000000001",
           completed: true,
         },
       ]),
     ).toHaveLength(1);
 
     expect(() =>
-      postGoalInputSchema.parse([{ kind: "required", key: "workout", amount: 45 }]),
-    ).toThrow();
-    expect(() =>
       postGoalInputSchema.parse([
-        {
-          kind: "optional",
-          optionalGoalId: "00000000-0000-0000-0000-000000000001",
-        },
+        { goalId: "00000000-0000-0000-0000-000000000001" },
       ]),
     ).toThrow();
     expect(() =>
       postGoalInputSchema.parse([
         {
-          kind: "optional",
-          optionalGoalId: "00000000-0000-0000-0000-000000000001",
+          goalId: "00000000-0000-0000-0000-000000000001",
           completed: true,
         },
         {
-          kind: "optional",
-          optionalGoalId: "00000000-0000-0000-0000-000000000001",
+          goalId: "00000000-0000-0000-0000-000000000001",
           completed: false,
         },
       ]),

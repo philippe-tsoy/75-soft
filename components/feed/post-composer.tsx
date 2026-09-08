@@ -11,17 +11,15 @@ import {
   MAX_NOTE_CHARACTERS,
   MAX_POST_PHOTO_BYTES,
   POST_PHOTO_MIME_TYPES,
-  REQUIRED_GOALS,
-  REQUIRED_GOAL_KEYS,
 } from "@/lib/config/75-soft";
 import { getYesterday } from "@/lib/dates";
 import { queryKeys } from "@/lib/query-keys";
 import { validateImage } from "@/lib/storage";
-import type { AchievementDTO, DayRollupDTO, OptionalGoalDTO } from "@/lib/types";
+import type { AchievementDTO, DayRollupDTO, GoalDTO } from "@/lib/types";
 
 interface PostComposerProps {
   open: boolean;
-  optionalGoals: OptionalGoalDTO[];
+  goals: GoalDTO[];
   userId: string;
   today: string;
   allowYesterday?: boolean;
@@ -69,7 +67,7 @@ async function fetchDay(localDate: string): Promise<DayRollupDTO> {
 
 export function PostComposer({
   open,
-  optionalGoals,
+  goals,
   userId,
   today,
   allowYesterday = true,
@@ -78,13 +76,11 @@ export function PostComposer({
 }: PostComposerProps) {
   const router = useRouter();
   const [localDate, setLocalDate] = useState<"today" | "yesterday">("today");
-  const [selectedOptional, setSelectedOptional] = useState<string[]>([]);
-  const [optionalValues, setOptionalValues] = useState<Record<string, string>>(
+  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
+  const [goalValues, setGoalValues] = useState<Record<string, string>>({});
+  const [goalCompleted, setGoalCompleted] = useState<Record<string, boolean>>(
     {},
   );
-  const [optionalCompleted, setOptionalCompleted] = useState<
-    Record<string, boolean>
-  >({});
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -101,10 +97,12 @@ export function PostComposer({
     enabled: open,
   });
   const day = dayQuery.data;
-  const ready = Boolean(day && day.metCount >= 4);
+  const ready = Boolean(
+    day && day.totalCount > 0 && day.metCount >= day.totalCount,
+  );
 
-  const toggleOptional = (id: string) => {
-    setSelectedOptional((current) =>
+  const toggleGoal = (id: string) => {
+    setSelectedGoalIds((current) =>
       current.includes(id)
         ? current.filter((entry) => entry !== id)
         : [...current, id],
@@ -113,9 +111,9 @@ export function PostComposer({
 
   const resetDraft = () => {
     setLocalDate("today");
-    setSelectedOptional([]);
-    setOptionalValues({});
-    setOptionalCompleted({});
+    setSelectedGoalIds([]);
+    setGoalValues({});
+    setGoalCompleted({});
     setNote("");
     setPhoto(null);
     setPhotoError(null);
@@ -159,30 +157,26 @@ export function PostComposer({
     }
 
     try {
-      const goals = selectedOptional.map((id) => {
-        const goal = optionalGoals.find((entry) => entry.id === id);
+      const selectedGoals = selectedGoalIds.map((id) => {
+        const goal = goals.find((entry) => entry.id === id);
         if (!goal) {
-          throw new Error(
-            "One selected optional goal is no longer available.",
-          );
+          throw new Error("One selected goal is no longer available.");
         }
 
         if (goal.targetValue === null) {
           return {
-            kind: "optional" as const,
-            optionalGoalId: id,
-            completed: optionalCompleted[id] ?? false,
+            goalId: id,
+            completed: goalCompleted[id] ?? false,
           };
         }
 
-        const value = Number(optionalValues[id]);
+        const value = Number(goalValues[id]);
         if (!Number.isFinite(value) || value <= 0) {
           throw new Error(`${goal.name} needs a positive value.`);
         }
 
         return {
-          kind: "optional" as const,
-          optionalGoalId: id,
+          goalId: id,
           value,
         };
       });
@@ -195,7 +189,7 @@ export function PostComposer({
 
       const formData = new FormData();
       formData.set("localDate", localDate);
-      formData.set("goals", JSON.stringify(goals));
+      formData.set("goals", JSON.stringify(selectedGoals));
       formData.set("note", note);
       formData.set("clientOperationId", nextOperationId);
       formData.set("photo", photo);
@@ -288,25 +282,29 @@ export function PostComposer({
                 Finish {localDate}&rsquo;s goals to post
               </p>
               <p className="text-muted text-sm">
-                A post shares that day&rsquo;s results with a photo, so every
-                required goal needs to be met first — use the quick chips
-                (including Mark done) on the tracker if you want to finish
-                fast.
+                {day.totalCount === 0
+                  ? "You need at least one goal before you can post — add one on the tracker."
+                  : "A post shares that day's results with a photo, so every goal needs to be met first."}
               </p>
-              <ul className="space-y-1 text-sm">
-                {REQUIRED_GOAL_KEYS.map((key) => (
-                  <li className="flex items-center justify-between" key={key}>
-                    <span>{REQUIRED_GOALS[key].label}</span>
-                    <span
-                      className={
-                        day.goals[key].met ? "text-emerald-700" : "text-muted"
-                      }
+              {day.totalCount > 0 ? (
+                <ul className="space-y-1 text-sm">
+                  {day.goals.map((goal) => (
+                    <li
+                      className="flex items-center justify-between"
+                      key={goal.id}
                     >
-                      {day.goals[key].met ? "Met" : "Not yet"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <span>{goal.name}</span>
+                      <span
+                        className={
+                          goal.met ? "text-emerald-700" : "text-muted"
+                        }
+                      >
+                        {goal.met ? "Met" : "Not yet"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <Button onClick={goToTracker} type="button">
                 Go finish {localDate}&rsquo;s goals
               </Button>
@@ -321,31 +319,31 @@ export function PostComposer({
                   results
                 </legend>
                 <ul className="space-y-1 text-sm">
-                  {REQUIRED_GOAL_KEYS.map((key) => (
+                  {day.goals.map((goal) => (
                     <li
                       className="flex items-center justify-between"
-                      key={key}
+                      key={goal.id}
                     >
-                      <span>{REQUIRED_GOALS[key].label}</span>
+                      <span>{goal.name}</span>
                       <span className="text-emerald-700">
                         ✓{" "}
-                        {key === "diet"
+                        {goal.target === undefined
                           ? "Met"
-                          : `${day.goals[key].amount ?? 0} ${day.goals[key].unit ?? ""}`}
+                          : `${goal.amount ?? 0} ${goal.unit ?? ""}`}
                       </span>
                     </li>
                   ))}
                 </ul>
               </fieldset>
 
-              {optionalGoals.length > 0 ? (
+              {goals.length > 0 ? (
                 <fieldset className="space-y-3">
                   <legend className="text-foreground text-sm font-semibold">
-                    Optional goals
+                    Attach goals to this post
                   </legend>
                   <div className="space-y-2">
-                    {optionalGoals.map((goal) => {
-                      const selected = selectedOptional.includes(goal.id);
+                    {goals.map((goal) => {
+                      const selected = selectedGoalIds.includes(goal.id);
                       return (
                         <div
                           className="border-border bg-card rounded-xl border p-3"
@@ -358,7 +356,7 @@ export function PostComposer({
                                 ? "bg-surface-accent text-primary"
                                 : "hover:bg-surface-accent"
                             }`}
-                            onClick={() => toggleOptional(goal.id)}
+                            onClick={() => toggleGoal(goal.id)}
                             type="button"
                           >
                             {selected ? "✓ " : ""}
@@ -366,24 +364,21 @@ export function PostComposer({
                           </button>
                           {selected && goal.targetValue !== null ? (
                             <div className="mt-3 flex items-center gap-2">
-                              <Label
-                                className="sr-only"
-                                htmlFor={`optional-${goal.id}`}
-                              >
+                              <Label className="sr-only" htmlFor={`goal-${goal.id}`}>
                                 {goal.name} value
                               </Label>
                               <Input
-                                id={`optional-${goal.id}`}
+                                id={`goal-${goal.id}`}
                                 min="0"
                                 onChange={(event) =>
-                                  setOptionalValues((current) => ({
+                                  setGoalValues((current) => ({
                                     ...current,
                                     [goal.id]: event.target.value,
                                   }))
                                 }
                                 step="any"
                                 type="number"
-                                value={optionalValues[goal.id] ?? ""}
+                                value={goalValues[goal.id] ?? ""}
                               />
                               <span className="text-muted text-sm">
                                 {goal.unit}
@@ -392,10 +387,10 @@ export function PostComposer({
                           ) : selected ? (
                             <label className="text-muted mt-2 flex min-h-11 items-center gap-2 text-sm">
                               <input
-                                checked={optionalCompleted[goal.id] ?? false}
+                                checked={goalCompleted[goal.id] ?? false}
                                 className="size-5"
                                 onChange={(event) =>
-                                  setOptionalCompleted((current) => ({
+                                  setGoalCompleted((current) => ({
                                     ...current,
                                     [goal.id]: event.target.checked,
                                   }))
@@ -412,7 +407,7 @@ export function PostComposer({
                 </fieldset>
               ) : (
                 <p className="text-muted text-sm">
-                  Optional goals appear here once you create them in Me.
+                  Your goals appear here once you add them on the tracker.
                 </p>
               )}
 

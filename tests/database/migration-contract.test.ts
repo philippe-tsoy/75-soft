@@ -36,11 +36,19 @@ describe("W8 migration contracts", () => {
       [...migrationNumbers].sort((a, b) => a - b),
     );
 
+    // 0018 intentionally drops optional_goals/optional_goal_logs when the
+    // flat goal model replaced them -- a deliberate, explicitly authorized
+    // data-loss decision (see that migration's own comments), not a gap in
+    // this guardrail.
+    const allowedDropTable = new Set(["0018_flat_goals.sql"]);
+
     for (const name of migrationNames) {
       const sql = migration(name);
       expect(sql).toMatch(/\bbegin\s*;/iu);
       expect(sql).toMatch(/\bcommit\s*;/iu);
-      expect(sql).not.toMatch(/\bdrop\s+table\b/iu);
+      if (!allowedDropTable.has(name)) {
+        expect(sql).not.toMatch(/\bdrop\s+table\b/iu);
+      }
       expect(sql).not.toMatch(/\btruncate\s+/iu);
     }
   });

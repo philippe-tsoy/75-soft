@@ -4,7 +4,6 @@ import type {
   DayDisplayState,
   DayRollupDTO,
   DailyBoardDTO,
-  GoalDotState,
 } from "@/lib/types";
 
 import type {
@@ -33,22 +32,22 @@ function safeDayStatus(value: string): DayDisplayState {
     : "unscored";
 }
 
-function safeAmount(value: number | null | undefined): number {
+function safeAmount(value: number | null | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
-    : 0;
+    : undefined;
 }
 
-function safeMetCount(value: number | null | undefined): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.min(4, Math.trunc(value)))
+function safeCount(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
     : 0;
 }
 
 export function mapDayRollupRow(row: DayRollupRow): DayRollupDTO {
-  const nestedGoals = row.goals;
   const status = safeDayStatus(row.status);
   const maskGoals = row.invalidated || status === "unscored";
+  const goals = maskGoals ? [] : (row.goals ?? []);
 
   return {
     localDate: row.local_date,
@@ -56,61 +55,20 @@ export function mapDayRollupRow(row: DayRollupRow): DayRollupDTO {
     status,
     editable: row.editable,
     invalidated: row.invalidated,
-    goals: {
-      workout: nestedGoals?.workout
-        ? {
-            ...nestedGoals.workout,
-            amount: safeAmount(nestedGoals.workout.amount),
-            met: maskGoals ? false : nestedGoals.workout.met,
-            markedDone: maskGoals ? false : nestedGoals.workout.markedDone,
-          }
-        : {
-            amount: safeAmount(row.workout_amount),
-            target: 45,
-            unit: "minutes",
-            met: maskGoals ? false : row.workout_amount >= 45,
-            markedDone: false,
-          },
-      water: nestedGoals?.water
-        ? {
-            ...nestedGoals.water,
-            amount: safeAmount(nestedGoals.water.amount),
-            met: maskGoals ? false : nestedGoals.water.met,
-            markedDone: maskGoals ? false : nestedGoals.water.markedDone,
-          }
-        : {
-            amount: safeAmount(row.water_amount),
-            target: 2_000,
-            unit: "ml",
-            met: maskGoals ? false : row.water_amount >= 2_000,
-            markedDone: false,
-          },
-      reading: nestedGoals?.reading
-        ? {
-            ...nestedGoals.reading,
-            amount: safeAmount(nestedGoals.reading.amount),
-            met: maskGoals ? false : nestedGoals.reading.met,
-            markedDone: maskGoals ? false : nestedGoals.reading.markedDone,
-          }
-        : {
-            amount: safeAmount(row.reading_amount),
-            target: 10,
-            unit: "pages",
-            met: maskGoals ? false : row.reading_amount >= 10,
-            markedDone: false,
-          },
-      diet: nestedGoals?.diet
-        ? {
-            ...nestedGoals.diet,
-            met: maskGoals ? false : nestedGoals.diet.met,
-          }
-        : {
-            target: 1,
-            unit: "attestation",
-            met: maskGoals ? false : row.diet_met === true,
-          },
-    },
-    metCount: maskGoals ? 0 : safeMetCount(row.met_count),
+    goals: goals.map((goal) => ({
+      id: goal.id,
+      name: goal.name,
+      isPrivate: goal.isPrivate,
+      ...(safeAmount(goal.amount) !== undefined
+        ? { amount: safeAmount(goal.amount) }
+        : {}),
+      ...(goal.target !== null ? { target: goal.target } : {}),
+      unit: goal.unit,
+      met: goal.met,
+      markedDone: goal.markedDone,
+    })),
+    metCount: maskGoals ? 0 : safeCount(row.met_count),
+    totalCount: maskGoals ? 0 : safeCount(row.total_count),
   };
 }
 
@@ -122,9 +80,7 @@ export function mapCalendarCellRow(row: CalendarCellRow): CalendarCellDTO {
     dayNumber: row.day_number,
     status,
     metCount:
-      row.invalidated || status === "unscored"
-        ? 0
-        : safeMetCount(row.met_count),
+      row.invalidated || status === "unscored" ? 0 : safeCount(row.met_count),
     editable: row.editable,
     invalidated: row.invalidated,
   };
@@ -134,17 +90,11 @@ export function mapDailyBoardScoreRow(
   row: DailyBoardScoreRow,
 ): DailyBoardScoreRpc {
   const eligible = row.eligible === true;
-  const goalStates: GoalDotState = {
-    workout: eligible && row.workout_met === true,
-    water: eligible && row.water_met === true,
-    reading: eligible && row.reading_met === true,
-    diet: eligible && row.diet_met === true,
-  };
 
   return {
     scoreDate: row.score_date,
-    goalsAchievedToday: eligible ? safeMetCount(row.goals_achieved_today) : 0,
-    goalStates,
+    metCount: eligible ? safeCount(row.met_count) : 0,
+    totalCount: eligible ? safeCount(row.total_count) : 0,
     eligible,
   };
 }

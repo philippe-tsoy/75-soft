@@ -224,7 +224,9 @@ export function TeamScreen({
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-3 text-sm">
-                <span>{member.goalsAchievedToday}/4 today</span>
+                <span>
+                  {member.metCount}/{member.totalCount} today
+                </span>
                 <span className="text-muted">
                   {member.individualPct}% complete
                 </span>

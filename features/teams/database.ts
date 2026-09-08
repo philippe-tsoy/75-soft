@@ -164,9 +164,8 @@ export async function getTeamSummary(
         individualPct: Number(
           member.individualPct ?? member.individual_pct ?? 0,
         ),
-        goalsAchievedToday: Number(
-          member.goalsAchievedToday ?? member.goals_achieved_today ?? 0,
-        ),
+        metCount: Number(member.metCount ?? member.met_count ?? 0),
+        totalCount: Number(member.totalCount ?? member.total_count ?? 0),
       };
     }),
   );

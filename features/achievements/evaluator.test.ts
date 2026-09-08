@@ -20,7 +20,6 @@ const emptyEvidence: AchievementEvidence = {
   currentLocalDate: "2026-09-10",
   currentDayNumber: 10,
   posts: [],
-  waterEvents: [],
   days: [],
 };
 
@@ -33,7 +32,6 @@ function post(
     localDate: "2026-09-10",
     createdAt: `2026-09-10T10:00:0${id}Z`,
     hasPhoto: false,
-    requiredGoals: [],
     ...overrides,
   };
 }
@@ -60,16 +58,14 @@ describe("achievement catalog and evaluator", () => {
       "FIRST_PHOTO",
       "DAY_75",
       "THREE_POSTS_ONE_DAY",
-      "WATER_BEFORE_NOON",
       "FULL_DAY_AFTER_MISS",
       "SEVEN_PHOTOS",
-      "WATER_EXACT_TARGET",
     ]);
   });
 
   it("renders hidden locked achievements as ???", () => {
     const hidden = ACHIEVEMENT_CATALOG.find(
-      (achievement) => achievement.code === "WATER_EXACT_TARGET",
+      (achievement) => achievement.code === "SEVEN_PHOTOS",
     );
 
     expect(hidden).toBeDefined();
@@ -79,12 +75,12 @@ describe("achievement catalog and evaluator", () => {
       isHidden: true,
       unlockedAt: null,
     });
-    expect(toAchievementDTO(hidden!, "2026-09-10T10:00:00.000Z")).toMatchObject(
-      {
-        title: "Exact Pour",
-        description: "Reach exactly 2,000 ml in a daily water rollup.",
-      },
-    );
+    expect(
+      toAchievementDTO(hidden!, "2026-09-10T10:00:00.000Z"),
+    ).toMatchObject({
+      title: hidden!.title,
+      description: hidden!.description,
+    });
   });
 
   it("returns every simultaneous unlock in deterministic priority order", () => {
@@ -92,7 +88,7 @@ describe("achievement catalog and evaluator", () => {
       ...emptyEvidence,
       currentDayNumber: 75,
       posts: [post("1", { hasPhoto: true })],
-      days: [day("2026-09-10", { status: "complete", metCount: 4 })],
+      days: [day("2026-09-10", { status: "complete", metCount: 3 })],
     };
 
     const result = evaluateAchievementRules(evidence);
@@ -126,17 +122,9 @@ describe("achievement catalog and evaluator", () => {
         post("2", { hasPhoto: true, invalidated: true }),
         post("3", { hasPhoto: true, invalidated: true }),
       ],
-      waterEvents: [
-        {
-          id: "water-1",
-          localDate: "2026-09-10",
-          createdAt: "2026-09-10T10:00:00.000Z",
-          amountMl: 2_000,
-          localHour: 10,
-          invalidated: true,
-        },
+      days: [
+        day("2026-09-10", { status: "complete", metCount: 3, invalidated: true }),
       ],
-      days: [day("2026-09-10", { invalidated: true })],
     };
 
     expect(evaluateAchievementRules(evidence).newlyUnlocked).toEqual([]);
@@ -170,25 +158,9 @@ describe("achievement catalog and evaluator", () => {
         post("6", { hasPhoto: true }),
         post("7", { hasPhoto: true }),
       ],
-      waterEvents: [
-        {
-          id: "water-1",
-          localDate: "2026-09-10",
-          createdAt: "2026-09-10T10:00:00.000Z",
-          amountMl: 1_000,
-          localHour: 10,
-        },
-        {
-          id: "water-2",
-          localDate: "2026-09-10",
-          createdAt: "2026-09-10T11:00:00.000Z",
-          amountMl: 1_000,
-          localHour: 11,
-        },
-      ],
       days: [
         day("2026-09-09"),
-        day("2026-09-10", { status: "complete", metCount: 4 }),
+        day("2026-09-10", { status: "complete", metCount: 3 }),
       ],
     };
 
@@ -199,10 +171,8 @@ describe("achievement catalog and evaluator", () => {
     expect(codes).toEqual(
       expect.arrayContaining([
         "THREE_POSTS_ONE_DAY",
-        "WATER_BEFORE_NOON",
         "FULL_DAY_AFTER_MISS",
         "SEVEN_PHOTOS",
-        "WATER_EXACT_TARGET",
       ]),
     );
   });

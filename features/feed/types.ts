@@ -2,7 +2,7 @@ import type {
   AchievementDTO,
   CommentDTO,
   DayRollupDTO,
-  OptionalGoalDTO,
+  GoalDTO,
   PostDTO,
   ProfileDTO,
 } from "@/lib/types";
@@ -71,7 +71,7 @@ export interface ReactionResult {
   emoji: string;
 }
 
-export interface OwnedOptionalGoal extends OptionalGoalDTO {
+export interface OwnedGoal extends GoalDTO {
   mode: "checkbox" | "numeric";
 }
 

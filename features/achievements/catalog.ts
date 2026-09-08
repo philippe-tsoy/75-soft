@@ -18,7 +18,7 @@ export const ACHIEVEMENT_CATALOG: readonly AchievementDefinition[] = [
   {
     code: "FIRST_FULL_DAY",
     title: "Full Day",
-    description: "Meet all four required goals in one day.",
+    description: "Meet all of your goals in one day.",
     isHidden: false,
     priority: 20,
   },
@@ -44,13 +44,6 @@ export const ACHIEVEMENT_CATALOG: readonly AchievementDefinition[] = [
     priority: 50,
   },
   {
-    code: "WATER_BEFORE_NOON",
-    title: "Early Hydration",
-    description: "Reach 2,000 ml before noon in your timezone.",
-    isHidden: true,
-    priority: 60,
-  },
-  {
     code: "FULL_DAY_AFTER_MISS",
     title: "Comeback Day",
     description: "Complete a local day immediately after a closed no-goal day.",
@@ -63,13 +56,6 @@ export const ACHIEVEMENT_CATALOG: readonly AchievementDefinition[] = [
     description: "Publish seven photo updates.",
     isHidden: true,
     priority: 90,
-  },
-  {
-    code: "WATER_EXACT_TARGET",
-    title: "Exact Pour",
-    description: "Reach exactly 2,000 ml in a daily water rollup.",
-    isHidden: true,
-    priority: 100,
   },
 ] as const;
 

@@ -15,45 +15,26 @@ export interface WaterContainerRow {
   active?: boolean;
 }
 
+export interface GoalStateRow {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  amount: number | null;
+  target: number | null;
+  unit: string | null;
+  met: boolean;
+  markedDone: boolean;
+}
+
 export interface DayRollupRow {
   local_date: string;
   day_number: number;
   status: DayDisplayState;
   editable: boolean;
   invalidated: boolean;
-  workout_amount: number;
-  water_amount: number;
-  reading_amount: number;
-  diet_met: boolean;
   met_count: number;
-  goals?: {
-    workout: {
-      amount: number;
-      target: number;
-      unit: "minutes";
-      met: boolean;
-      markedDone: boolean;
-    };
-    water: {
-      amount: number;
-      target: number;
-      unit: "ml";
-      met: boolean;
-      markedDone: boolean;
-    };
-    reading: {
-      amount: number;
-      target: number;
-      unit: "pages";
-      met: boolean;
-      markedDone: boolean;
-    };
-    diet: {
-      target: number;
-      unit: "attestation";
-      met: boolean;
-    };
-  };
+  total_count: number;
+  goals: GoalStateRow[];
 }
 
 export interface CalendarCellRow {
@@ -67,11 +48,8 @@ export interface CalendarCellRow {
 
 export interface DailyBoardScoreRow {
   score_date: string;
-  goals_achieved_today: number;
-  workout_met: boolean;
-  water_met: boolean;
-  reading_met: boolean;
-  diet_met: boolean;
+  met_count: number;
+  total_count: number;
   eligible: boolean;
 }
 
@@ -89,8 +67,7 @@ export type DayRpcName =
   | "get_member_daily_board_score"
   | "day_add_amount"
   | "day_add_container_tap"
-  | "day_toggle_diet"
-  | "day_toggle_amount_goal_done";
+  | "day_toggle_goal_done";
 
 export interface DayRpcArgs {
   get_day_rollup: {
@@ -128,22 +105,19 @@ export interface DayRpcArgs {
   };
   day_add_amount: {
     p_local_date: string;
-    p_goal_key: "workout" | "water" | "reading";
+    p_goal_id: string;
     p_amount_int: number;
     p_client_operation_id: string;
   };
   day_add_container_tap: {
     p_local_date: string;
     p_container_id: string;
+    p_goal_id: string;
     p_client_operation_id: string;
   };
-  day_toggle_diet: {
+  day_toggle_goal_done: {
     p_local_date: string;
-    p_client_operation_id: string;
-  };
-  day_toggle_amount_goal_done: {
-    p_local_date: string;
-    p_goal_key: "workout" | "water" | "reading";
+    p_goal_id: string;
     p_client_operation_id: string;
   };
 }
@@ -157,8 +131,7 @@ export interface DayRpcReturns {
   get_member_daily_board_score: DailyBoardScoreRow[];
   day_add_amount: DayMutationRow[];
   day_add_container_tap: DayMutationRow[];
-  day_toggle_diet: DayMutationRow[];
-  day_toggle_amount_goal_done: DayMutationRow[];
+  day_toggle_goal_done: DayMutationRow[];
 }
 
 export interface DayQueryError {
@@ -189,8 +162,8 @@ export interface DayTableQuery<T> extends PromiseLike<DayQueryResult<T[]>> {
 
 /**
  * The foundation database type intentionally stops before domain tables exist.
- * This local adapter keeps W2's table/RPC boundary typed until the generated
- * schema is refreshed by the coordinator.
+ * This local adapter keeps the day-tracking table/RPC boundary typed until
+ * the generated schema is refreshed by the coordinator.
  */
 export interface DayTrackingClient {
   from(table: "water_containers"): DayTableQuery<WaterContainerRow>;

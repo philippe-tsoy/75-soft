@@ -20,7 +20,7 @@ import {
   type FeedPostInsert,
   type FeedPostRow,
   type FeedPostUpdate,
-  type OptionalGoalRow,
+  type GoalRow,
   type PostGoalEntryInsert,
   type PostGoalEntryRow,
   type ProfileRow,
@@ -43,7 +43,7 @@ import type {
   DeletePostResult,
   FeedPage,
   FeedScoringAdapter,
-  OwnedOptionalGoal,
+  OwnedGoal,
   ReactionResult,
 } from "./types";
 
@@ -130,13 +130,13 @@ async function getProfiles(
   return new Map((data ?? []).map((profile) => [profile.id, profile]));
 }
 
-export async function listOwnedOptionalGoals(
+export async function listOwnedGoals(
   client: FeedClient,
   ownerId: string,
-): Promise<OwnedOptionalGoal[]> {
+): Promise<OwnedGoal[]> {
   const { data, error } = await client
-    .from("optional_goals")
-    .select("id, owner_id, name, target_value, unit, active")
+    .from("goals")
+    .select("id, owner_id, name, target_value, unit, is_private, active")
     .eq("owner_id", ownerId)
     .eq("active", true)
     .order("created_at", { ascending: true });
@@ -145,12 +145,14 @@ export async function listOwnedOptionalGoals(
     return [];
   }
 
-  return ((data ?? []) as OptionalGoalRow[]).map((goal) => ({
+  return ((data ?? []) as GoalRow[]).map((goal) => ({
     id: goal.id,
     name: goal.name,
     targetValue: parseNumeric(goal.target_value),
     unit: goal.unit,
+    isPrivate: goal.is_private,
     active: goal.active,
+    templateId: null,
     mode: goal.target_value === null ? "checkbox" : "numeric",
   }));
 }
@@ -168,52 +170,61 @@ async function normalizePostGoals(
 
   for (const goal of goals) {
     const { data, error } = await client
-      .from("optional_goals")
-      .select("id, owner_id, name, target_value, unit, active")
-      .eq("id", goal.optionalGoalId)
+      .from("goals")
+      .select("id, owner_id, name, target_value, unit, is_private, active")
+      .eq("id", goal.goalId)
       .eq("owner_id", authorId)
       .maybeSingle();
 
     if (error) {
-      throwDatabaseError("Unable to resolve the optional goal", error);
+      throwDatabaseError("Unable to resolve the goal", error);
     }
 
-    const optionalGoal = data as OptionalGoalRow | null;
-    if (!optionalGoal) {
+    const ownedGoal = data as GoalRow | null;
+    if (!ownedGoal) {
       throw new HttpError(
         422,
         "BUSINESS_RULE_VIOLATION",
-        "The selected optional goal is not yours",
+        "The selected goal is not yours",
       );
     }
-    if (!optionalGoal.active) {
+    if (!ownedGoal.active) {
       throw new HttpError(
         422,
         "BUSINESS_RULE_VIOLATION",
-        "Archived optional goals cannot be posted",
+        "Removed goals cannot be posted",
       );
     }
 
-    const isNumeric = optionalGoal.target_value !== null;
+    const target = parseNumeric(ownedGoal.target_value);
+    const isNumeric = target !== null;
     if (isNumeric) {
       if (goal.value === undefined || goal.value === null) {
-        invalidGoal("This optional goal requires a numeric value");
+        invalidGoal("This goal requires a numeric value");
       }
       if (!Number.isFinite(goal.value) || goal.value <= 0) {
-        invalidGoal("Optional goal values must be positive");
+        invalidGoal("Goal values must be positive");
       }
     } else if (goal.completed === undefined || goal.completed === null) {
-      invalidGoal("This optional goal requires a checkbox state");
+      invalidGoal("This goal requires a checkbox state");
     }
+
+    const met = isNumeric
+      ? (goal.value as number) >= target
+      : Boolean(goal.completed);
 
     entries.push({
       required_goal_key: null,
-      optional_goal_id: optionalGoal.id,
-      optional_goal_name: optionalGoal.name,
+      optional_goal_id: ownedGoal.id,
+      // Frozen at post time: this is the only mechanism behind the
+      // "Secret goal" redaction, reusing the same "snapshot survives
+      // rename/archive" pattern this column already had.
+      optional_goal_name: ownedGoal.is_private ? "Secret goal" : ownedGoal.name,
       amount_int: null,
       diet_value: null,
       optional_value: isNumeric ? goal.value : null,
       optional_completed: isNumeric ? null : goal.completed,
+      met,
     });
   }
 
@@ -416,7 +427,6 @@ export async function createPost(input: {
   goals: readonly PostGoalInput[];
   note: string | null;
   photo: File;
-  requiredSnapshot: Record<string, unknown>;
   teamId: string | null;
   clientOperationId: string;
   scoring?: FeedScoringAdapter;
@@ -458,7 +468,6 @@ export async function createPost(input: {
     local_date: input.localDate,
     note: input.note,
     photo_path: photoPath,
-    required_snapshot: input.requiredSnapshot,
     team_id: input.teamId,
     status: "pending",
     client_operation_id: input.clientOperationId,

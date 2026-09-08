@@ -10,10 +10,9 @@ import {
   requireSession,
 } from "@/lib/http";
 
-import { OptionalGoalsDatabaseError } from "@/features/optional-goals/database";
-import { OptionalGoalRuleError } from "@/features/optional-goals/service";
+import { GoalsDatabaseError } from "@/features/goals/database";
 
-export async function requireOptionalGoalAccess(
+export async function requireGoalAccess(
   _request: Request,
 ): Promise<AccessContext> {
   await requireSession();
@@ -53,29 +52,16 @@ export function resolveClientOperationId(
 }
 
 function mapDatabaseError(error: unknown): unknown {
-  if (error instanceof OptionalGoalRuleError) {
-    return new HttpError(
-      error.status,
-      error.code,
-      error.message,
-      error.details,
-    );
-  }
-
-  if (!(error instanceof OptionalGoalsDatabaseError)) {
+  if (!(error instanceof GoalsDatabaseError)) {
     return error;
   }
 
   if (error.postgresCode === "23514") {
-    return new HttpError(
-      422,
-      "BUSINESS_RULE_VIOLATION",
-      "The optional goal operation is not allowed",
-    );
+    return new HttpError(422, "BUSINESS_RULE_VIOLATION", "That goal change is not allowed");
   }
 
   if (error.postgresCode === "23503") {
-    return new HttpError(404, "NOT_FOUND", "The optional goal was not found");
+    return new HttpError(404, "NOT_FOUND", "The goal was not found");
   }
 
   if (error.postgresCode === "42501") {
@@ -86,18 +72,10 @@ function mapDatabaseError(error: unknown): unknown {
     );
   }
 
-  if (error.postgresCode === "23505") {
-    return new HttpError(
-      409,
-      "CONFLICT",
-      "The optional goal operation conflicts with an existing operation",
-    );
-  }
-
   return error;
 }
 
-export function handleOptionalGoalRouteError(error: unknown) {
+export function handleGoalRouteError(error: unknown) {
   return handleRouteError(mapDatabaseError(error));
 }
 

@@ -42,7 +42,7 @@ export function CalendarGrid({ cells }: CalendarGridProps) {
   return (
     <Card aria-labelledby="person-calendar-title">
       <CardHeader>
-        <CardTitle id="person-calendar-title">Required-goal calendar</CardTitle>
+        <CardTitle id="person-calendar-title">Goal calendar</CardTitle>
         <p className="text-muted text-sm">
           Progress is descriptive; each challenge is scored independently.
         </p>
@@ -58,7 +58,7 @@ export function CalendarGrid({ cells }: CalendarGridProps) {
         >
           {cells.map((cell) => (
             <div
-              aria-label={`${cell.localDate}: ${statusLabels[cell.status]}, ${cell.metCount} of 4 goals`}
+              aria-label={`${cell.localDate}: ${statusLabels[cell.status]}, ${cell.metCount} goals met`}
               className={`min-h-16 rounded-xl border p-2 text-center ${statusClasses[cell.status]}`}
               key={cell.localDate}
               role="listitem"
@@ -82,7 +82,7 @@ export function CalendarGrid({ cells }: CalendarGridProps) {
               )}
               {cell.status !== "unscored" && cell.status !== "future" ? (
                 <span className="mt-1 block text-[11px] font-semibold tabular-nums">
-                  {cell.metCount}/4
+                  {cell.metCount} met
                 </span>
               ) : null}
             </div>

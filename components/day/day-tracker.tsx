@@ -1,12 +1,13 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AchievementToast } from "@/components/achievements";
+import { createGoal, fetchGoalTemplates, GoalForm } from "@/components/goals";
 import { Sheet } from "@/components/sheets/sheet";
-import { Button, Card, Input, Label } from "@/components/ui";
+import { Button, Card, CardHeader, CardTitle, Input, Label } from "@/components/ui";
 import {
   DayApiError,
   requestDayApi,
@@ -15,11 +16,12 @@ import {
 import {
   amountDeltaTo,
   applyOptimisticAmount,
-  applyOptimisticDiet,
+  applyOptimisticGoalDone,
   resolveAmountFill,
   withGoalState,
 } from "@/features/day-tracking/optimistic";
 import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
+import { queryKeys } from "@/lib/query-keys";
 import type {
   AchievementDTO,
   AmountInputMode,
@@ -41,46 +43,36 @@ export interface DayTrackerProps {
   amountInputMode: AmountInputMode;
 }
 
-/**
- * Slider granularity per goal. The right end of every track is the goal's
- * own target, so these only control how finely the thumb snaps.
- */
-const SLIDER_STEPS: Record<AmountGoal, number> = {
-  reading: 1,
-  water: 50,
-  workout: 1,
-};
-
-const FALLBACK_TARGETS: Record<AmountGoal, number> = {
-  reading: 10,
-  water: 2_000,
-  workout: 45,
-};
-
-/** Unit each amount goal's ledger entries are logged in. */
-const AMOUNT_UNITS: Record<AmountGoal, AmountUnit> = {
-  reading: "pages",
-  water: "ml",
-  workout: "minutes",
-};
-
-type AmountGoal = "workout" | "water" | "reading";
-
-/** The four independently-editable cards on the tracker. */
-type GoalKey = AmountGoal | "diet";
-
 interface DayMutationResponse {
   day: DayRollupDTO;
   newAchievements?: AchievementDTO[];
 }
 
-type AmountUnit = "minutes" | "ml" | "l" | "pages";
+type AmountUnit = "ml" | "l" | string;
 
 interface GoalErrorState {
   message: string;
   sessionExpired: boolean;
   /** Re-attempts the failed mutation with the same idempotency key. */
   retry: () => void;
+}
+
+/** A ml-unit goal is treated as "water-like" for the containers shortcut. */
+function isMlGoal(goal: GoalProgressDTO): boolean {
+  return (goal.unit ?? "").trim().toLowerCase() === "ml";
+}
+
+/** Round, useful quick-amount buttons for an arbitrary numeric target. */
+function quickAmountsFor(target: number): number[] {
+  const candidates = [
+    Math.round(target * 0.25),
+    Math.round(target * 0.5),
+    Math.round(target),
+  ];
+
+  return Array.from(new Set(candidates.filter((value) => value > 0))).sort(
+    (left, right) => left - right,
+  );
 }
 
 function formatStatus(status: DayRollupDTO["status"]): string {
@@ -102,13 +94,11 @@ function CustomAmountForm({
   pending,
   onAdd,
   inputLabel,
-  inputPlaceholder,
 }: {
   id: string;
   pending: boolean;
   onAdd: (amount: number) => void;
   inputLabel: string;
-  inputPlaceholder: string;
 }) {
   const [customAmount, setCustomAmount] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -146,7 +136,7 @@ function CustomAmountForm({
           setCustomAmount(event.target.value);
           setValidationError(null);
         }}
-        placeholder={inputPlaceholder}
+        placeholder="Amount"
         type="number"
         value={customAmount}
       />
@@ -215,11 +205,11 @@ function CustomWaterAmountForm({
       }}
     >
       <Label className="sr-only" htmlFor={id}>
-        Custom water amount
+        Custom amount
       </Label>
       <Input
         aria-invalid={validationError ? true : undefined}
-        aria-label="Custom water amount"
+        aria-label="Custom amount"
         disabled={pending}
         id={id}
         inputMode={unit === "l" ? "decimal" : "numeric"}
@@ -234,7 +224,7 @@ function CustomWaterAmountForm({
         value={customAmount}
       />
       <select
-        aria-label="Custom water unit"
+        aria-label="Custom unit"
         className="border-border bg-card text-foreground focus-visible:ring-primary min-h-11 rounded-xl border px-3 text-sm outline-none focus-visible:ring-2"
         disabled={pending}
         onChange={(event) => {
@@ -320,7 +310,7 @@ function ContainerStepper({
   return (
     <div className="border-border inline-flex items-center gap-1 rounded-xl border p-1">
       <Button
-        aria-label={`Remove ${container.label} (${container.volumeMl} ml) from Water`}
+        aria-label={`Remove ${container.label} (${container.volumeMl} ml)`}
         disabled={pending || isPendingCreate}
         onClick={onRemoveContainer}
         variant="secondary"
@@ -331,7 +321,7 @@ function ContainerStepper({
         {container.label} · {container.volumeMl} ml
       </span>
       <Button
-        aria-label={`Add ${container.label} (${container.volumeMl} ml) to Water`}
+        aria-label={`Add ${container.label} (${container.volumeMl} ml)`}
         disabled={pending || isPendingCreate}
         onClick={onAddContainer}
         variant="secondary"
@@ -342,113 +332,105 @@ function ContainerStepper({
   );
 }
 
-function ProgressControl({
-  title,
-  progress,
-  pending,
-  onAdd,
-  onToggleDone,
-  toggleLocked,
-  error,
-  sessionExpired,
-  onRetry,
-  quickAmounts,
-  unitLabel,
-  inputLabel,
-  inputPlaceholder,
-}: {
-  title: string;
-  progress: GoalProgressDTO;
-  pending: boolean;
-  onAdd: (amount: number) => void;
-  onToggleDone: () => void;
-  toggleLocked: boolean;
-  error?: string | null;
-  sessionExpired?: boolean;
-  onRetry?: () => void;
-  quickAmounts: number[];
-  unitLabel: string;
-  inputLabel: string;
-  inputPlaceholder: string;
-}) {
-  return (
-    <GoalControl
-      error={error}
-      onRetry={onRetry}
-      onToggleDone={onToggleDone}
-      pending={pending}
-      progress={progress}
-      sessionExpired={sessionExpired}
-      title={title}
-      toggleLocked={toggleLocked}
-    >
-      {quickAmounts.map((amount) => (
-        <AmountStepper
-          amount={amount}
-          key={amount}
-          label={title}
-          onAdjust={onAdd}
-          pending={pending}
-          unitLabel={unitLabel}
-        />
-      ))}
-      <CustomAmountForm
-        id={`${title}-custom-amount`}
-        inputLabel={inputLabel}
-        inputPlaceholder={inputPlaceholder}
-        onAdd={onAdd}
-        pending={pending}
-      />
-    </GoalControl>
+function EmptyGoalsState({ userId }: { userId: string }) {
+  const router = useRouter();
+  const [formOpen, setFormOpen] = useState(false);
+  const [addingTemplateId, setAddingTemplateId] = useState<string | null>(
+    null,
   );
-}
+  const [error, setError] = useState<string | null>(null);
+  const templatesQuery = useQuery({
+    queryKey: queryKeys.goalTemplates(),
+    queryFn: fetchGoalTemplates,
+  });
 
-function SliderControl({
-  title,
-  goal,
-  progress,
-  pending,
-  unitLabel,
-  onSetAmount,
-  onToggleDone,
-  toggleLocked,
-  error,
-  sessionExpired,
-  onRetry,
-}: {
-  title: string;
-  goal: AmountGoal;
-  progress: GoalProgressDTO;
-  pending: boolean;
-  unitLabel: string;
-  onSetAmount: (nextValue: number) => void;
-  onToggleDone: () => void;
-  toggleLocked: boolean;
-  error?: string | null;
-  sessionExpired?: boolean;
-  onRetry?: () => void;
-}) {
+  async function addFromTemplate(template: {
+    id: string;
+    name: string;
+    targetValue: number | null;
+    unit: string | null;
+  }) {
+    setAddingTemplateId(template.id);
+    setError(null);
+    try {
+      await createGoal({
+        name: template.name,
+        targetValue: template.targetValue,
+        unit: template.unit,
+        templateId: template.id,
+      });
+      router.refresh();
+    } catch {
+      setError("Could not add that goal. Try again.");
+    } finally {
+      setAddingTemplateId(null);
+    }
+  }
+
   return (
-    <GoalControl
-      error={error}
-      onRetry={onRetry}
-      onToggleDone={onToggleDone}
-      pending={pending}
-      progress={progress}
-      sessionExpired={sessionExpired}
-      title={title}
-      toggleLocked={toggleLocked}
-    >
-      <AmountSlider
-        disabled={pending}
-        label={title}
-        onCommit={onSetAmount}
-        step={SLIDER_STEPS[goal]}
-        target={progress.target ?? FALLBACK_TARGETS[goal]}
-        unitLabel={unitLabel}
-        value={progress.amount ?? 0}
+    <div className="space-y-4 py-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Pick your goals</CardTitle>
+          <p className="text-muted mt-1 text-sm">
+            You&apos;re not tracking anything yet. Add a suggestion below or
+            create your own — you need at least one to start.
+          </p>
+        </CardHeader>
+
+        {templatesQuery.data && templatesQuery.data.length > 0 ? (
+          <ul className="space-y-2">
+            {templatesQuery.data.map((template) => (
+              <li
+                className="border-border flex items-center justify-between gap-3 rounded-xl border p-3"
+                key={template.id}
+              >
+                <div>
+                  <p className="font-medium">{template.name}</p>
+                  <p className="text-muted text-xs">
+                    {template.targetValue === null
+                      ? "Checkbox goal"
+                      : `Target: ${template.targetValue} ${template.unit}`}
+                  </p>
+                </div>
+                <Button
+                  disabled={addingTemplateId === template.id}
+                  onClick={() => void addFromTemplate(template)}
+                  variant="secondary"
+                >
+                  {addingTemplateId === template.id ? "Adding…" : "Add"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <Button className="mt-4" onClick={() => setFormOpen(true)}>
+          Add a custom goal
+        </Button>
+
+        {error ? (
+          <p className="mt-3 text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </Card>
+
+      <GoalForm
+        goal={null}
+        onClose={() => setFormOpen(false)}
+        onSaved={() => {
+          setFormOpen(false);
+          router.refresh();
+        }}
+        open={formOpen}
+        templates={templatesQuery.data ?? []}
       />
-    </GoalControl>
+
+      <span className="sr-only" id={`tracker-user-${userId}`}>
+        Tracker for current member
+      </span>
+    </div>
   );
 }
 
@@ -465,32 +447,32 @@ export function DayTracker({
   const [containers, setContainers] = useState(initialContainers);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [goalErrors, setGoalErrors] = useState<
-    Partial<Record<GoalKey, GoalErrorState>>
+    Record<string, GoalErrorState>
   >({});
   const [containersOpen, setContainersOpen] = useState(false);
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
-  const [preFillAmount, setPreFillAmount] = useState<
-    Partial<Record<AmountGoal, number>>
-  >({});
+  const [preFillAmount, setPreFillAmount] = useState<Record<string, number>>(
+    {},
+  );
   const useSliders = amountInputMode === "slider";
 
-  function isPending(goal: GoalKey): boolean {
-    return Boolean(pending[goal]);
+  function isPending(goalId: string): boolean {
+    return Boolean(pending[goalId]);
   }
 
-  function setGoalError(goal: GoalKey, state: GoalErrorState) {
-    setGoalErrors((current) => ({ ...current, [goal]: state }));
+  function setGoalError(goalId: string, state: GoalErrorState) {
+    setGoalErrors((current) => ({ ...current, [goalId]: state }));
   }
 
-  function clearGoalError(goal: GoalKey) {
+  function clearGoalError(goalId: string) {
     setGoalErrors((current) => {
-      if (!(goal in current)) {
+      if (!(goalId in current)) {
         return current;
       }
 
       const next = { ...current };
-      delete next[goal];
+      delete next[goalId];
       return next;
     });
   }
@@ -500,47 +482,36 @@ export function DayTracker({
     router.refresh();
   }
 
-  function toOptimisticAmount(
-    goal: AmountGoal,
-    amount: number,
-    unit: AmountUnit,
-  ): number {
-    if (goal === "water" && (unit === "ml" || unit === "l")) {
-      return normalizeWaterAmount(amount, unit);
-    }
-
-    return amount;
-  }
-
-  function setGoalPending(goal: string, value: boolean) {
-    setPending((current) => ({ ...current, [goal]: value }));
+  function setGoalPending(goalId: string, value: boolean) {
+    setPending((current) => ({ ...current, [goalId]: value }));
   }
 
   async function addAmount(
-    goal: AmountGoal,
+    goalId: string,
     amount: number,
     unit: AmountUnit,
     retryOperationId?: string,
   ) {
-    if (isPending(goal)) {
+    if (isPending(goalId)) {
       return;
     }
     if (!day.editable) {
       return;
     }
 
-    const previousGoalProgress = day.goals[goal];
+    const previousGoalProgress = day.goals.find((goal) => goal.id === goalId);
+    if (!previousGoalProgress) {
+      return;
+    }
+
     const operation = withOperationId(retryOperationId);
+    const optimisticAmount =
+      unit === "ml" || unit === "l" ? normalizeWaterAmount(amount, unit) : amount;
     setDay((prevDay) =>
-      applyOptimisticAmount(
-        prevDay,
-        goal,
-        toOptimisticAmount(goal, amount, unit),
-        today,
-      ),
+      applyOptimisticAmount(prevDay, goalId, optimisticAmount, today),
     );
-    setGoalPending(goal, true);
-    clearGoalError(goal);
+    setGoalPending(goalId, true);
+    clearGoalError(goalId);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -549,51 +520,60 @@ export function DayTracker({
           method: "POST",
           headers: operation.headers,
           body: JSON.stringify({
-            goal,
+            goalId,
             amount,
-            unit,
+            unit: unit === "ml" || unit === "l" ? unit : undefined,
             clientOperationId: operation.operationId,
           }),
         },
       );
+      const confirmed = result.day.goals.find((goal) => goal.id === goalId);
       setDay((prevDay) =>
-        withGoalState(prevDay, goal, result.day.goals[goal], today),
+        confirmed
+          ? withGoalState(prevDay, goalId, confirmed, today)
+          : result.day,
       );
       setAchievementToast(result.newAchievements?.[0] ?? null);
       refreshRelatedData();
     } catch (requestError) {
       setDay((prevDay) =>
-        withGoalState(prevDay, goal, previousGoalProgress, today),
+        withGoalState(prevDay, goalId, previousGoalProgress, today),
       );
-      setGoalError(goal, {
+      setGoalError(goalId, {
         message: apiErrorMessage(requestError),
         sessionExpired:
           requestError instanceof DayApiError && requestError.status === 401,
-        retry: () => void addAmount(goal, amount, unit, operation.operationId),
+        retry: () =>
+          void addAmount(goalId, amount, unit, operation.operationId),
       });
     } finally {
-      setGoalPending(goal, false);
+      setGoalPending(goalId, false);
     }
   }
 
   async function addContainer(
+    goalId: string,
     container: ContainerDTO,
     retryOperationId?: string,
   ) {
-    if (isPending("water")) {
+    if (isPending(goalId)) {
       return;
     }
     if (!day.editable) {
       return;
     }
 
-    const previousGoalProgress = day.goals.water;
+    const previousGoalProgress = day.goals.find((goal) => goal.id === goalId);
+    if (!previousGoalProgress) {
+      return;
+    }
+
     const operation = withOperationId(retryOperationId);
     setDay((prevDay) =>
-      applyOptimisticAmount(prevDay, "water", container.volumeMl, today),
+      applyOptimisticAmount(prevDay, goalId, container.volumeMl, today),
     );
-    setGoalPending("water", true);
-    clearGoalError("water");
+    setGoalPending(goalId, true);
+    clearGoalError(goalId);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
@@ -602,74 +582,84 @@ export function DayTracker({
           method: "POST",
           headers: operation.headers,
           body: JSON.stringify({
-            goal: "water",
+            goalId,
             containerId: container.id,
             clientOperationId: operation.operationId,
           }),
         },
       );
+      const confirmed = result.day.goals.find((goal) => goal.id === goalId);
       setDay((prevDay) =>
-        withGoalState(prevDay, "water", result.day.goals.water, today),
+        confirmed
+          ? withGoalState(prevDay, goalId, confirmed, today)
+          : result.day,
       );
       setAchievementToast(result.newAchievements?.[0] ?? null);
       refreshRelatedData();
     } catch (requestError) {
       setDay((prevDay) =>
-        withGoalState(prevDay, "water", previousGoalProgress, today),
+        withGoalState(prevDay, goalId, previousGoalProgress, today),
       );
-      setGoalError("water", {
+      setGoalError(goalId, {
         message: apiErrorMessage(requestError),
         sessionExpired:
           requestError instanceof DayApiError && requestError.status === 401,
-        retry: () => void addContainer(container, operation.operationId),
+        retry: () =>
+          void addContainer(goalId, container, operation.operationId),
       });
     } finally {
-      setGoalPending("water", false);
+      setGoalPending(goalId, false);
     }
   }
 
-  async function toggleDiet(retryOperationId?: string) {
-    if (isPending("diet")) {
+  /** Simple independent flip, for a checkbox goal (no numeric target). */
+  async function toggleGoalDone(goalId: string, retryOperationId?: string) {
+    if (isPending(goalId)) {
       return;
     }
     if (!day.editable) {
       return;
     }
 
-    const previousGoalProgress = day.goals.diet;
+    const previousGoalProgress = day.goals.find((goal) => goal.id === goalId);
+    if (!previousGoalProgress) {
+      return;
+    }
+
     const operation = withOperationId(retryOperationId);
-    setDay((prevDay) => applyOptimisticDiet(prevDay, today));
-    setGoalPending("diet", true);
-    clearGoalError("diet");
+    setDay((prevDay) => applyOptimisticGoalDone(prevDay, goalId, today));
+    setGoalPending(goalId, true);
+    clearGoalError(goalId);
 
     try {
       const result = await requestDayApi<DayMutationResponse>(
-        `/api/day/${day.localDate}/diet/toggle`,
+        `/api/day/${day.localDate}/goals/${goalId}/toggle-done`,
         {
           method: "POST",
           headers: operation.headers,
-          body: JSON.stringify({
-            clientOperationId: operation.operationId,
-          }),
+          body: JSON.stringify({ clientOperationId: operation.operationId }),
         },
       );
+      const confirmed = result.day.goals.find((goal) => goal.id === goalId);
       setDay((prevDay) =>
-        withGoalState(prevDay, "diet", result.day.goals.diet, today),
+        confirmed
+          ? withGoalState(prevDay, goalId, confirmed, today)
+          : result.day,
       );
       setAchievementToast(result.newAchievements?.[0] ?? null);
       refreshRelatedData();
     } catch (requestError) {
       setDay((prevDay) =>
-        withGoalState(prevDay, "diet", previousGoalProgress, today),
+        withGoalState(prevDay, goalId, previousGoalProgress, today),
       );
-      setGoalError("diet", {
+      setGoalError(goalId, {
         message: apiErrorMessage(requestError),
         sessionExpired:
           requestError instanceof DayApiError && requestError.status === 401,
-        retry: () => void toggleDiet(operation.operationId),
+        retry: () => void toggleGoalDone(goalId, operation.operationId),
       });
     } finally {
-      setGoalPending("diet", false);
+      setGoalPending(goalId, false);
     }
   }
 
@@ -677,36 +667,43 @@ export function DayTracker({
    * The slider picks an absolute total; the ledger only accepts signed
    * deltas, so translate before hitting the same endpoint the steppers use.
    */
-  function setAmountTo(goal: AmountGoal, nextValue: number, unit: AmountUnit) {
-    const delta = amountDeltaTo(day.goals[goal].amount ?? 0, nextValue);
+  function setAmountTo(goalId: string, nextValue: number, unit: AmountUnit) {
+    const current = day.goals.find((goal) => goal.id === goalId);
+    const delta = amountDeltaTo(current?.amount ?? 0, nextValue);
     if (delta === 0) {
       return;
     }
 
-    void addAmount(goal, delta, unit);
+    void addAmount(goalId, delta, unit);
   }
 
   /**
-   * The checkmark on an amount goal is a fill/undo shortcut, not an
+   * The checkmark on a numeric goal is a fill/undo shortcut, not an
    * independent flag: checking it fills the amount to the target, and
    * checking it again restores whatever amount was logged right before
    * that fill. Reaching the target by dragging the slider itself still
    * locks the checkmark (see isAmountToggleLocked) since there is no
    * "previous amount" to restore to.
    */
-  function toggleAmountFill(goal: AmountGoal) {
-    if (isPending(goal)) {
+  function toggleAmountFill(goalId: string, unit: AmountUnit) {
+    if (isPending(goalId)) {
       return;
     }
     if (!day.editable) {
       return;
     }
 
-    const progress = day.goals[goal];
-    const target = progress.target ?? FALLBACK_TARGETS[goal];
+    const progress = day.goals.find((goal) => goal.id === goalId);
+    if (!progress || progress.target === undefined) {
+      return;
+    }
+
     const amount = progress.amount ?? 0;
-    const unit = AMOUNT_UNITS[goal];
-    const resolution = resolveAmountFill(amount, target, preFillAmount[goal]);
+    const resolution = resolveAmountFill(
+      amount,
+      progress.target,
+      preFillAmount[goalId],
+    );
 
     if (resolution.action === "locked") {
       return;
@@ -715,24 +712,29 @@ export function DayTracker({
     setPreFillAmount((current) => {
       const next = { ...current };
       if (resolution.action === "fill") {
-        next[goal] = amount;
+        next[goalId] = amount;
       } else {
-        delete next[goal];
+        delete next[goalId];
       }
       return next;
     });
-    setAmountTo(goal, resolution.nextValue, unit);
+    setAmountTo(goalId, resolution.nextValue, unit);
   }
 
-  function isAmountToggleLocked(goal: AmountGoal): boolean {
-    const progress = day.goals[goal];
-    if (progress.amount === undefined || progress.target === undefined) {
+  function isAmountToggleLocked(goalId: string): boolean {
+    const progress = day.goals.find((goal) => goal.id === goalId);
+    if (!progress || progress.amount === undefined || progress.target === undefined) {
       return false;
     }
 
     return (
-      progress.amount >= progress.target && preFillAmount[goal] === undefined
+      progress.amount >= progress.target &&
+      preFillAmount[goalId] === undefined
     );
+  }
+
+  if (day.goals.length === 0) {
+    return <EmptyGoalsState userId={userId} />;
   }
 
   return (
@@ -753,10 +755,10 @@ export function DayTracker({
             </p>
           </div>
           <p
-            aria-label={`${day.metCount} of 4 challenges met`}
+            aria-label={`${day.metCount} of ${day.totalCount} goals met`}
             className="text-sm font-semibold"
           >
-            {day.metCount}/4 met
+            {day.metCount}/{day.totalCount} met
           </p>
         </div>
         {!day.editable ? (
@@ -771,141 +773,113 @@ export function DayTracker({
         ) : null}
       </Card>
 
-      {useSliders ? (
-        <SliderControl
-          error={goalErrors.workout?.message}
-          goal="workout"
-          onRetry={goalErrors.workout?.retry}
-          onSetAmount={(next) => setAmountTo("workout", next, "minutes")}
-          onToggleDone={() => toggleAmountFill("workout")}
-          pending={isPending("workout") || !day.editable}
-          progress={day.goals.workout}
-          sessionExpired={goalErrors.workout?.sessionExpired}
-          title="Workout"
-          toggleLocked={isAmountToggleLocked("workout")}
-          unitLabel="min"
-        />
-      ) : (
-        <ProgressControl
-          error={goalErrors.workout?.message}
-          inputLabel="Workout minutes to add or remove"
-          inputPlaceholder="Minutes"
-          onAdd={(amount) => void addAmount("workout", amount, "minutes")}
-          onRetry={goalErrors.workout?.retry}
-          onToggleDone={() => toggleAmountFill("workout")}
-          pending={isPending("workout") || !day.editable}
-          progress={day.goals.workout}
-          quickAmounts={[15, 30, 45]}
-          sessionExpired={goalErrors.workout?.sessionExpired}
-          title="Workout"
-          toggleLocked={isAmountToggleLocked("workout")}
-          unitLabel="min"
-        />
-      )}
+      {day.goals.map((goal) => {
+        const goalPending = isPending(goal.id) || !day.editable;
+        const goalErrorState = goalErrors[goal.id];
+        const isNumeric = goal.target !== undefined;
+        const unit = goal.unit ?? "";
+        const showContainers = isNumeric && isMlGoal(goal);
 
-      {useSliders ? (
-        <SliderControl
-          error={goalErrors.water?.message}
-          goal="water"
-          onRetry={goalErrors.water?.retry}
-          onSetAmount={(next) => setAmountTo("water", next, "ml")}
-          onToggleDone={() => toggleAmountFill("water")}
-          pending={isPending("water") || !day.editable}
-          progress={day.goals.water}
-          sessionExpired={goalErrors.water?.sessionExpired}
-          title="Water"
-          toggleLocked={isAmountToggleLocked("water")}
-          unitLabel="ml"
-        />
-      ) : (
-        <GoalControl
-          error={goalErrors.water?.message}
-          onRetry={goalErrors.water?.retry}
-          onToggleDone={() => toggleAmountFill("water")}
-          pending={isPending("water") || !day.editable}
-          progress={day.goals.water}
-          sessionExpired={goalErrors.water?.sessionExpired}
-          title="Water"
-          toggleLocked={isAmountToggleLocked("water")}
-          titleAction={
-            <Button
-              aria-label="Manage water containers"
-              className="min-h-0 px-2 py-1 text-xs"
-              disabled={isPending("water")}
-              onClick={() => setContainersOpen(true)}
-              variant="ghost"
-            >
-              Containers
-            </Button>
-          }
-        >
-          <AmountStepper
-            amount={250}
-            label="Water"
-            onAdjust={(amount) => void addAmount("water", amount, "ml")}
-            pending={isPending("water") || !day.editable}
-            unitLabel="ml"
-          />
-          {containers.map((container) => (
-            <ContainerStepper
-              container={container}
-              key={container.id}
-              onAddContainer={() => void addContainer(container)}
-              onRemoveContainer={() =>
-                void addAmount("water", -container.volumeMl, "ml")
-              }
-              pending={isPending("water") || !day.editable}
+        if (!isNumeric) {
+          return (
+            <GoalControl
+              error={goalErrorState?.message}
+              key={goal.id}
+              onRetry={goalErrorState?.retry}
+              onToggleDone={() => void toggleGoalDone(goal.id)}
+              pending={goalPending}
+              progress={goal}
+              sessionExpired={goalErrorState?.sessionExpired}
+              title={goal.name}
             />
-          ))}
-          <CustomWaterAmountForm
-            id="water-custom-amount"
-            onAdd={(amount, unit) => void addAmount("water", amount, unit)}
-            pending={isPending("water") || !day.editable}
-          />
-        </GoalControl>
-      )}
+          );
+        }
 
-      {useSliders ? (
-        <SliderControl
-          error={goalErrors.reading?.message}
-          goal="reading"
-          onRetry={goalErrors.reading?.retry}
-          onSetAmount={(next) => setAmountTo("reading", next, "pages")}
-          onToggleDone={() => toggleAmountFill("reading")}
-          pending={isPending("reading") || !day.editable}
-          progress={day.goals.reading}
-          sessionExpired={goalErrors.reading?.sessionExpired}
-          title="Reading"
-          toggleLocked={isAmountToggleLocked("reading")}
-          unitLabel="pages"
-        />
-      ) : (
-        <ProgressControl
-          error={goalErrors.reading?.message}
-          inputLabel="Reading pages to add or remove"
-          inputPlaceholder="Pages"
-          onAdd={(amount) => void addAmount("reading", amount, "pages")}
-          onRetry={goalErrors.reading?.retry}
-          onToggleDone={() => toggleAmountFill("reading")}
-          pending={isPending("reading") || !day.editable}
-          progress={day.goals.reading}
-          quickAmounts={[5, 10]}
-          sessionExpired={goalErrors.reading?.sessionExpired}
-          title="Reading"
-          toggleLocked={isAmountToggleLocked("reading")}
-          unitLabel="pages"
-        />
-      )}
+        const target = goal.target ?? 0;
 
-      <GoalControl
-        error={goalErrors.diet?.message}
-        onRetry={goalErrors.diet?.retry}
-        onToggleDone={() => void toggleDiet()}
-        pending={isPending("diet") || !day.editable}
-        progress={day.goals.diet}
-        sessionExpired={goalErrors.diet?.sessionExpired}
-        title="Ate well & drank only socially"
-      />
+        return (
+          <GoalControl
+            error={goalErrorState?.message}
+            key={goal.id}
+            onRetry={goalErrorState?.retry}
+            onToggleDone={() => toggleAmountFill(goal.id, unit)}
+            pending={goalPending}
+            progress={goal}
+            sessionExpired={goalErrorState?.sessionExpired}
+            title={goal.name}
+            titleAction={
+              showContainers ? (
+                <Button
+                  aria-label={`Manage ${goal.name} containers`}
+                  className="min-h-0 px-2 py-1 text-xs"
+                  disabled={isPending(goal.id)}
+                  onClick={() => setContainersOpen(true)}
+                  variant="ghost"
+                >
+                  Containers
+                </Button>
+              ) : undefined
+            }
+            toggleLocked={isAmountToggleLocked(goal.id)}
+          >
+            {useSliders ? (
+              <AmountSlider
+                disabled={goalPending}
+                label={goal.name}
+                onCommit={(next) => setAmountTo(goal.id, next, unit)}
+                step={showContainers ? 50 : 1}
+                target={target}
+                unitLabel={unit}
+                value={goal.amount ?? 0}
+              />
+            ) : (
+              <>
+                {quickAmountsFor(target).map((amount) => (
+                  <AmountStepper
+                    amount={amount}
+                    key={amount}
+                    label={goal.name}
+                    onAdjust={(signed) => void addAmount(goal.id, signed, unit)}
+                    pending={goalPending}
+                    unitLabel={unit}
+                  />
+                ))}
+                {showContainers
+                  ? containers.map((container) => (
+                      <ContainerStepper
+                        container={container}
+                        key={container.id}
+                        onAddContainer={() =>
+                          void addContainer(goal.id, container)
+                        }
+                        onRemoveContainer={() =>
+                          void addAmount(goal.id, -container.volumeMl, "ml")
+                        }
+                        pending={goalPending}
+                      />
+                    ))
+                  : null}
+                {showContainers ? (
+                  <CustomWaterAmountForm
+                    id={`${goal.id}-custom-amount`}
+                    onAdd={(amount, addUnit) =>
+                      void addAmount(goal.id, amount, addUnit)
+                    }
+                    pending={goalPending}
+                  />
+                ) : (
+                  <CustomAmountForm
+                    id={`${goal.id}-custom-amount`}
+                    inputLabel={`${goal.name} amount to add or remove`}
+                    onAdd={(amount) => void addAmount(goal.id, amount, unit)}
+                    pending={goalPending}
+                  />
+                )}
+              </>
+            )}
+          </GoalControl>
+        );
+      })}
 
       <Sheet
         onClose={() => setContainersOpen(false)}
@@ -914,7 +888,7 @@ export function DayTracker({
       >
         <p className="text-muted mb-4 text-sm">
           Manage your saved containers here. Each one shows up as its own − / +
-          stepper on the Water card.
+          stepper on any goal measured in ml.
         </p>
         <ContainerManager
           containers={containers}
@@ -924,13 +898,14 @@ export function DayTracker({
 
       <p className="text-muted px-1 text-xs">
         {useSliders
-          ? "Drag a slider to set the total logged for that challenge; releasing it saves, and totals never drop below zero."
-          : "Use − and + to log or correct workout, water, and reading amounts; corrections never drop a total below zero."}{" "}
-        The checkmark on Workout, Water, and Reading fills the amount to the
-        target; tapping it again restores whatever amount was logged before.
-        Reaching the target by dragging the slider itself locks the checkmark
-        until you move the amount back down. Switch between sliders and buttons
-        on the Me screen; every action can be safely retried.
+          ? "Drag a slider to set the total logged for that goal; releasing it saves, and totals never drop below zero."
+          : "Use − and + to log or correct a goal's amount; corrections never drop a total below zero."}{" "}
+        The checkmark on a numeric goal fills the amount to the target;
+        tapping it again restores whatever amount was logged before.
+        Reaching the target by dragging the slider itself locks the
+        checkmark until you move the amount back down. Switch between
+        sliders and buttons, and add or remove goals, on the Me screen;
+        every action can be safely retried.
       </p>
       <AchievementToast
         onDismiss={() => setAchievementToast(null)}

@@ -18,17 +18,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asDayRollup(value: unknown): DayRollupDTO | null {
   const candidate = Array.isArray(value) ? value[0] : value;
-  if (!isRecord(candidate) || !isRecord(candidate.goals)) {
+  if (!isRecord(candidate) || !Array.isArray(candidate.goals)) {
     return null;
   }
 
-  const goals = candidate.goals;
   const localDate = candidate.localDate ?? candidate.local_date;
   const dayNumber = candidate.dayNumber ?? candidate.day_number;
   const status = candidate.status;
   const editable = candidate.editable;
   const invalidated = candidate.invalidated;
   const metCount = candidate.metCount ?? candidate.met_count;
+  const totalCount = candidate.totalCount ?? candidate.total_count;
 
   if (
     typeof localDate !== "string" ||
@@ -37,10 +37,7 @@ function asDayRollup(value: unknown): DayRollupDTO | null {
     typeof editable !== "boolean" ||
     typeof invalidated !== "boolean" ||
     typeof metCount !== "number" ||
-    !isRecord(goals.workout) ||
-    !isRecord(goals.water) ||
-    !isRecord(goals.reading) ||
-    !isRecord(goals.diet)
+    typeof totalCount !== "number"
   ) {
     return null;
   }
@@ -51,13 +48,9 @@ function asDayRollup(value: unknown): DayRollupDTO | null {
     status: status as DayRollupDTO["status"],
     editable,
     invalidated,
-    goals: {
-      workout: goals.workout as unknown as DayRollupDTO["goals"]["workout"],
-      water: goals.water as unknown as DayRollupDTO["goals"]["water"],
-      reading: goals.reading as unknown as DayRollupDTO["goals"]["reading"],
-      diet: goals.diet as unknown as DayRollupDTO["goals"]["diet"],
-    },
+    goals: candidate.goals as unknown as DayRollupDTO["goals"],
     metCount,
+    totalCount,
   };
 }
 

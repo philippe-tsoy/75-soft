@@ -7,12 +7,10 @@ import type {
 } from "./database";
 import { firstRpcRow } from "./database";
 import type {
-  AmountGoalDoneToggleInput,
   DayAmountInput,
   DayContainerInput,
-  DayEntryInput,
   DayTrackingMutationService,
-  DietToggleInput,
+  GoalDoneToggleInput,
 } from "./types";
 import { normalizeDayAmount } from "./validation";
 
@@ -33,6 +31,26 @@ function mutationError(error: DayQueryError): HttpError {
 
   if (message.includes("CONTAINER_NOT_FOUND")) {
     return new HttpError(404, "NOT_FOUND", "Water container was not found");
+  }
+
+  if (message.includes("GOAL_ARCHIVED")) {
+    return new HttpError(
+      422,
+      "BUSINESS_RULE_VIOLATION",
+      "This goal has been archived",
+    );
+  }
+
+  if (message.includes("GOAL_NOT_FOUND")) {
+    return new HttpError(404, "NOT_FOUND", "Goal was not found");
+  }
+
+  if (message.includes("INVALID_GOAL_SHAPE")) {
+    return new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "That action does not match this goal",
+    );
   }
 
   if (message.includes("ACTOR_MISMATCH") || message.includes("FORBIDDEN")) {
@@ -116,6 +134,7 @@ export function createDayTrackingMutationService(
           db.rpc("day_add_container_tap", {
             p_local_date: localDate,
             p_container_id: containerInput.containerId,
+            p_goal_id: containerInput.goalId,
             p_client_operation_id: containerInput.clientOperationId,
           }),
         );
@@ -125,31 +144,20 @@ export function createDayTrackingMutationService(
       return runMutation(() =>
         db.rpc("day_add_amount", {
           p_local_date: localDate,
-          p_goal_key: amountInput.goal,
+          p_goal_id: amountInput.goalId,
           p_amount_int: amountInput.amount,
           p_client_operation_id: amountInput.clientOperationId,
         }),
       );
     },
 
-    async toggleDiet(userId, localDate, input) {
+    async toggleGoalDone(userId, localDate, input) {
       void userId;
-      const toggleInput: DietToggleInput = input;
+      const toggleInput: GoalDoneToggleInput = input;
       return runMutation(() =>
-        db.rpc("day_toggle_diet", {
+        db.rpc("day_toggle_goal_done", {
           p_local_date: localDate,
-          p_client_operation_id: toggleInput.clientOperationId,
-        }),
-      );
-    },
-
-    async toggleAmountGoalDone(userId, localDate, input) {
-      void userId;
-      const toggleInput: AmountGoalDoneToggleInput = input;
-      return runMutation(() =>
-        db.rpc("day_toggle_amount_goal_done", {
-          p_local_date: localDate,
-          p_goal_key: toggleInput.goal,
+          p_goal_id: toggleInput.goalId,
           p_client_operation_id: toggleInput.clientOperationId,
         }),
       );

@@ -3,14 +3,12 @@
 // called from features/achievements/database.ts. Keep the two rule sets in
 // sync manually until one is deleted or this one is actually adopted.
 import { getYesterday } from "@/lib/dates";
-import { WATER_TARGET_ML } from "@/lib/config/75-soft";
 
 import { ACHIEVEMENT_CATALOG } from "@/features/achievements/catalog";
 import type {
   AchievementCode,
   AchievementDefinition,
   AchievementEvidence,
-  AchievementWaterEvent,
 } from "@/features/achievements/types";
 
 export interface AchievementRuleEvaluation {
@@ -35,24 +33,12 @@ function getValidPosts(evidence: AchievementEvidence) {
   );
 }
 
-function getValidWaterEvents(evidence: AchievementEvidence) {
-  const invalidatedDates = getInvalidatedDates(evidence);
-
-  return evidence.waterEvents.filter(
-    (event) =>
-      !event.invalidated &&
-      event.localDate <= evidence.currentLocalDate &&
-      !invalidatedDates.has(event.localDate),
-  );
-}
-
 function hasFirstFullDay(evidence: AchievementEvidence): boolean {
   return evidence.days.some(
     (day) =>
       day.localDate <= evidence.currentLocalDate &&
       !day.invalidated &&
-      day.status === "complete" &&
-      day.metCount === 4,
+      day.status === "complete",
   );
 }
 
@@ -66,34 +52,6 @@ function hasThreePostsOnOneDay(evidence: AchievementEvidence): boolean {
   return [...counts.values()].some((count) => count >= 3);
 }
 
-function hasWaterMilestoneBeforeNoon(evidence: AchievementEvidence): boolean {
-  const eventsByDate = new Map<string, AchievementWaterEvent[]>();
-
-  for (const event of getValidWaterEvents(evidence)) {
-    const events = eventsByDate.get(event.localDate) ?? [];
-    events.push(event);
-    eventsByDate.set(event.localDate, events);
-  }
-
-  for (const events of eventsByDate.values()) {
-    events.sort(
-      (left, right) =>
-        left.createdAt.localeCompare(right.createdAt) ||
-        left.id.localeCompare(right.id),
-    );
-
-    let total = 0;
-    for (const event of events) {
-      total += event.amountMl;
-      if (total >= WATER_TARGET_ML && event.localHour < 12) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
 function hasFullDayAfterMiss(evidence: AchievementEvidence): boolean {
   const daysByDate = new Map(evidence.days.map((day) => [day.localDate, day]));
 
@@ -101,8 +59,7 @@ function hasFullDayAfterMiss(evidence: AchievementEvidence): boolean {
     if (
       day.localDate > evidence.currentLocalDate ||
       day.invalidated ||
-      day.status !== "complete" ||
-      day.metCount !== 4
+      day.status !== "complete"
     ) {
       return false;
     }
@@ -121,34 +78,6 @@ function hasFullDayAfterMiss(evidence: AchievementEvidence): boolean {
 
 function hasSevenPhotos(evidence: AchievementEvidence): boolean {
   return getValidPosts(evidence).filter((post) => post.hasPhoto).length >= 7;
-}
-
-function hasExactWaterRollup(evidence: AchievementEvidence): boolean {
-  const eventsByDate = new Map<string, AchievementWaterEvent[]>();
-
-  for (const event of getValidWaterEvents(evidence)) {
-    const events = eventsByDate.get(event.localDate) ?? [];
-    events.push(event);
-    eventsByDate.set(event.localDate, events);
-  }
-
-  for (const events of eventsByDate.values()) {
-    events.sort(
-      (left, right) =>
-        left.createdAt.localeCompare(right.createdAt) ||
-        left.id.localeCompare(right.id),
-    );
-
-    let total = 0;
-    for (const event of events) {
-      total += event.amountMl;
-      if (total === WATER_TARGET_ML) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 function isCandidate(
@@ -170,14 +99,10 @@ function isCandidate(
       return evidence.currentDayNumber >= 75;
     case "THREE_POSTS_ONE_DAY":
       return hasThreePostsOnOneDay(evidence);
-    case "WATER_BEFORE_NOON":
-      return hasWaterMilestoneBeforeNoon(evidence);
     case "FULL_DAY_AFTER_MISS":
       return hasFullDayAfterMiss(evidence);
     case "SEVEN_PHOTOS":
       return hasSevenPhotos(evidence);
-    case "WATER_EXACT_TARGET":
-      return hasExactWaterRollup(evidence);
   }
 }
 

@@ -56,9 +56,6 @@ export function toAchievementPostEvidence(
     localDate: post.localDate,
     createdAt: post.createdAt,
     hasPhoto: post.photoUrl !== null,
-    requiredGoals: post.goals
-      .filter((goal) => goal.kind === "required")
-      .map((goal) => goal.key),
   };
 }
 
@@ -88,7 +85,6 @@ export async function collectAchievementEvidence(
       currentLocalDate,
       currentDayNumber,
       posts: [],
-      waterEvents: [],
       days: [],
     };
   }
@@ -97,10 +93,9 @@ export async function collectAchievementEvidence(
     member.joinLocalDate > cohortStartDate
       ? member.joinLocalDate
       : cohortStartDate;
-  const [days, posts, waterEvents] = await Promise.all([
+  const [days, posts] = await Promise.all([
     dayAdapter.getCalendar(userId, firstScoredDate, currentLocalDate),
     postAdapter.listPublishedAchievementEvidence(userId),
-    postAdapter.listPublishedWaterEvents(userId),
   ]);
 
   return {
@@ -108,7 +103,6 @@ export async function collectAchievementEvidence(
     currentLocalDate,
     currentDayNumber,
     posts,
-    waterEvents,
     days: mapDayEvidence(days),
   };
 }

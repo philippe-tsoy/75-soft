@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { PostStatus, RequiredGoalKey } from "@/lib/types";
+import type { PostStatus } from "@/lib/types";
 
 export interface FeedPostRow {
   id: string;
@@ -27,7 +27,8 @@ export interface FeedPostInsert {
   local_date: string;
   note?: string | null;
   photo_path: string;
-  required_snapshot: Record<string, unknown>;
+  /** Frozen legacy column; no longer written (defaults to {} in the DB). */
+  required_snapshot?: Record<string, unknown>;
   team_id?: string | null;
   status?: PostStatus;
   client_operation_id: string;
@@ -48,26 +49,30 @@ export interface FeedPostUpdate {
 export interface PostGoalEntryRow {
   id: string;
   post_id: string;
-  required_goal_key: RequiredGoalKey | null;
+  /** Legacy/frozen; no longer written. */
+  required_goal_key: string | null;
+  /** The goal id this entry snapshots (no FK -- survives archive/rename). */
   optional_goal_id: string | null;
   optional_goal_name: string | null;
   amount_int: number | null;
   diet_value: boolean | null;
   optional_value: number | string | null;
   optional_completed: boolean | null;
+  met: boolean | null;
   created_at: string;
 }
 
 export interface PostGoalEntryInsert {
   id?: string;
   post_id: string;
-  required_goal_key?: RequiredGoalKey | null;
+  required_goal_key?: string | null;
   optional_goal_id?: string | null;
   optional_goal_name?: string | null;
   amount_int?: number | null;
   diet_value?: boolean | null;
   optional_value?: number | string | null;
   optional_completed?: boolean | null;
+  met?: boolean | null;
   created_at?: string;
 }
 
@@ -129,12 +134,13 @@ export interface WaterContainerRow {
   active?: boolean;
 }
 
-export interface OptionalGoalRow {
+export interface GoalRow {
   id: string;
   owner_id: string;
   name: string;
   target_value: number | string | null;
   unit: string | null;
+  is_private: boolean;
   active: boolean;
 }
 
@@ -179,11 +185,7 @@ export type FeedDatabase = {
         Partial<WaterContainerRow>,
         Partial<WaterContainerRow>
       >;
-      optional_goals: TableDefinition<
-        OptionalGoalRow,
-        Partial<OptionalGoalRow>,
-        Partial<OptionalGoalRow>
-      >;
+      goals: TableDefinition<GoalRow, Partial<GoalRow>, Partial<GoalRow>>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -203,7 +205,7 @@ export const POST_COLUMNS =
   "id, author_id, cohort_id, local_date, note, photo_path, required_snapshot, team_id, status, client_operation_id, created_at, published_at, deleted_at, deleted_by";
 
 export const ENTRY_COLUMNS =
-  "id, post_id, required_goal_key, optional_goal_id, optional_goal_name, amount_int, diet_value, optional_value, optional_completed, created_at";
+  "id, post_id, required_goal_key, optional_goal_id, optional_goal_name, amount_int, diet_value, optional_value, optional_completed, met, created_at";
 
 export const COMMENT_COLUMNS =
   "id, post_id, author_id, body, client_operation_id, created_at, deleted_at, deleted_by";

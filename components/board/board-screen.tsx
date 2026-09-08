@@ -175,10 +175,10 @@ export function BoardScreen() {
             ) : (
               <Card className="space-y-3">
                 <CardHeader className="mb-2">
-                  <CardTitle>Required challenges achieved</CardTitle>
+                  <CardTitle>Goals achieved</CardTitle>
                   <p className="text-muted text-sm">
-                    Workout, water, reading, and diet for each member’s local
-                    today.
+                    Ranked by percentage of each member’s own goals met on
+                    their local today.
                   </p>
                 </CardHeader>
                 <div
@@ -225,8 +225,7 @@ export function BoardScreen() {
                 <CardHeader className="mb-2">
                   <CardTitle>Percentage completion</CardTitle>
                   <p className="text-muted text-sm">
-                    Cumulative required-goal-days completed since each member
-                    joined.
+                    Cumulative goal-days completed since each member joined.
                   </p>
                 </CardHeader>
                 <div className="space-y-2" role="list" aria-label="Team standings">

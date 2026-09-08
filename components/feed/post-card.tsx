@@ -6,15 +6,10 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Lightbox } from "@/components/lightbox/lightbox";
 import { Button, Card, Input } from "@/components/ui";
-import {
-  COHORT_START_DATE,
-  DEFAULT_REACTION_PALETTE,
-  REQUIRED_GOALS,
-  REQUIRED_GOAL_KEYS,
-} from "@/lib/config/75-soft";
+import { COHORT_START_DATE, DEFAULT_REACTION_PALETTE } from "@/lib/config/75-soft";
 import { formatInstantForViewer, getDayNumber } from "@/lib/dates";
 import { commentBodySchema, graphemeLength } from "@/lib/validation";
-import type { PostDTO, PostRequiredSnapshotDTO, RequiredGoalKey } from "@/lib/types";
+import type { PostDTO } from "@/lib/types";
 
 interface PostCardProps {
   post: PostDTO;
@@ -44,32 +39,12 @@ function createBrowserOperationId(): string {
   return crypto.randomUUID();
 }
 
-function displayRequiredGoal(
-  key: RequiredGoalKey,
-  snapshot: PostRequiredSnapshotDTO,
-): string {
-  const label = REQUIRED_GOALS[key].label;
-  if (key === "diet") {
-    return `${label}: met`;
-  }
-
-  const goal = snapshot[key];
-  return `${label}: ${goal.amount} ${REQUIRED_GOALS[key].unit}`;
-}
-
 function displayGoal(goal: PostDTO["goals"][number]): string {
-  if (goal.kind === "optional") {
-    if (goal.value !== null) {
-      return `${goal.name}: ${goal.value}`;
-    }
-    return `${goal.name}: ${goal.completed ? "complete" : "not complete"}`;
+  if (goal.amount !== null) {
+    return `${goal.name}: ${goal.amount}`;
   }
 
-  const label = REQUIRED_GOALS[goal.key].label;
-  if (goal.key === "diet") {
-    return `${label}: ${goal.met ? "yes" : "no"}`;
-  }
-  return `${label}: ${goal.amount ?? 0} ${goal.unit ?? ""}`.trim();
+  return `${goal.name}: ${goal.met ? "complete" : "not complete"}`;
 }
 
 async function responseMessage(response: Response): Promise<string> {
@@ -321,28 +296,18 @@ export function PostCard({
           ) : null}
         </div>
 
-        <ul className="flex flex-wrap gap-2" aria-label="Required results">
-          {REQUIRED_GOAL_KEYS.map((key) => (
-            <li
-              className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800"
-              key={`required-${key}`}
-            >
-              ✓ {displayRequiredGoal(key, post.requiredSnapshot)}
-            </li>
-          ))}
-        </ul>
-
         {post.goals.length > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="Selected optional goals">
-            {post.goals.map((goal) => (
+          <ul className="flex flex-wrap gap-2" aria-label="Attached goals">
+            {post.goals.map((goal, index) => (
               <li
-                className="bg-surface-accent text-primary rounded-full px-3 py-1 text-xs font-semibold"
-                key={
-                  goal.kind === "required"
-                    ? `required-${goal.key}`
-                    : `optional-${goal.optionalGoalId}`
+                className={
+                  goal.met
+                    ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800"
+                    : "bg-surface-accent text-primary rounded-full px-3 py-1 text-xs font-semibold"
                 }
+                key={goal.goalId ?? `goal-${index}`}
               >
+                {goal.met ? "✓ " : ""}
                 {displayGoal(goal)}
               </li>
             ))}

@@ -49,8 +49,7 @@ describe("W8 real authenticated RLS matrix", () => {
       ["memberships", "user_id"],
       ["posts", "id"],
       ["day_deltas", "id"],
-      ["optional_goals", "id"],
-      ["optional_goal_logs", "id"],
+      ["goals", "id"],
       ["audit_log", "id"],
     ] as const;
 
@@ -89,8 +88,7 @@ describe("W8 real authenticated RLS matrix", () => {
 
   it("keeps each member away from the other member's private rows", async () => {
     const privateTables = [
-      ["optional_goals", "owner_id"],
-      ["optional_goal_logs", "owner_id"],
+      ["goals", "owner_id"],
       ["water_containers", "owner_id"],
       ["day_deltas", "user_id"],
     ] as const;
@@ -167,7 +165,7 @@ describe("W8 real authenticated RLS matrix", () => {
     expect(memberA).toBeDefined();
     expect(admin).toBeDefined();
 
-    const privateWrite = await memberA!.from("optional_goals").insert({
+    const privateWrite = await memberA!.from("goals").insert({
       owner_id: rlsConfig.accounts.memberB.userId,
       name: "W8 forbidden write probe",
       target_value: null,

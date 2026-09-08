@@ -5,8 +5,8 @@ import { isoDateSchema } from "@/lib/validation";
 import { createDayTrackingServices } from "@/features/day-tracking";
 import { evaluateDayActionAchievements } from "@/features/achievements/server-adapters";
 import {
-  parseAmountGoalPathSegment,
-  parseAndResolveAmountGoalDoneToggle,
+  parseAndResolveGoalDoneToggle,
+  parseGoalIdPathSegment,
   readJsonBody,
 } from "@/features/day-tracking/validation";
 
@@ -35,11 +35,11 @@ export async function POST(request: Request, { params }: DayGoalRouteContext) {
     const access = await requireActiveMember();
     const { localDate: rawLocalDate, goal: rawGoal } = await params;
     const localDate = parseLocalDate(rawLocalDate);
-    const goal = parseAmountGoalPathSegment(rawGoal);
+    const goalId = parseGoalIdPathSegment(rawGoal);
     const body = await readJsonBody(request);
-    const input = parseAndResolveAmountGoalDoneToggle(body, request, goal);
+    const input = parseAndResolveGoalDoneToggle(body, request, goalId);
     const { mutations, reads } = await createDayTrackingServices();
-    const mutation = await mutations.toggleAmountGoalDone(
+    const mutation = await mutations.toggleGoalDone(
       access.user.id,
       localDate,
       input,

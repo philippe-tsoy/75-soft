@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { OptionalGoalsPanel } from "@/components/optional-goals";
+import { GoalsPanel } from "@/components/goals";
 import { AchievementPanel } from "@/components/achievements";
 import { AmountInputModeEditor } from "@/components/profile/amount-input-mode-editor";
 import { ReactionPaletteEditor } from "@/components/profile/reaction-palette-editor";
@@ -29,8 +29,7 @@ export default async function MePage() {
           </p>
           <h1 className="mt-1 text-2xl font-semibold">Me</h1>
           <p className="text-muted mt-2 text-sm">
-            Manage personal goals and review progress that never changes
-            required scoring.
+            Manage your goals and review your progress.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -77,7 +76,7 @@ export default async function MePage() {
       <AmountInputModeEditor initialMode={amountInputMode} />
       <ReactionPaletteEditor />
       <MyTeamPanel userId={profile.id} />
-      <OptionalGoalsPanel showArchived />
+      <GoalsPanel showArchived />
       <AchievementPanel />
       <p className="text-muted text-center text-xs">Version {APP_VERSION}</p>
     </div>

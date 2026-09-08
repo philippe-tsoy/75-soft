@@ -98,6 +98,11 @@ export function GoalControl({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-semibold">{title}</h2>
+            {progress.isPrivate ? (
+              <span className="text-muted rounded-full border border-current px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
+                Private
+              </span>
+            ) : null}
             {titleAction}
           </div>
           <p className="text-muted mt-1 text-sm">{amount}</p>

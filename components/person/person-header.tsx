@@ -17,7 +17,7 @@ export function PersonHeader({ person }: PersonHeaderProps) {
           {person.profile.displayName}
         </h1>
         <p className="text-muted mt-1 text-sm">
-          {person.goalsAchievedToday} of 4 required challenges achieved today
+          {person.metCount} of {person.totalCount} goals achieved today
         </p>
         <p className="text-muted mt-1 text-sm">
           {person.individualPct}% of the challenge complete so far

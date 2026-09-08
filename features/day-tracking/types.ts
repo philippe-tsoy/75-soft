@@ -1,11 +1,4 @@
-import type {
-  CalendarCellDTO,
-  ContainerDTO,
-  DayRollupDTO,
-  DailyBoardDTO,
-  GoalDotState,
-  RequiredGoalKey,
-} from "@/lib/types";
+import type { CalendarCellDTO, ContainerDTO, DayRollupDTO } from "@/lib/types";
 
 export interface DayRollupRpc extends DayRollupDTO {}
 
@@ -15,7 +8,10 @@ export interface DayMutationRpc {
   idempotent: boolean;
 }
 
-export interface DailyBoardScoreRpc extends DailyBoardDTO {
+export interface DailyBoardScoreRpc {
+  scoreDate: string;
+  metCount: number;
+  totalCount: number;
   eligible: boolean;
 }
 
@@ -23,29 +19,25 @@ export interface DailyBoardEntryRpc {
   rank: number;
   userId: string;
   scoreDate: string;
-  goalsAchievedToday: number;
-  goalStates: GoalDotState;
+  metCount: number;
+  totalCount: number;
 }
 
 export interface DayAmountInput {
-  goal: "workout" | "water" | "reading";
+  goalId: string;
   amount: number;
-  unit?: "minutes" | "ml" | "l" | "pages";
+  unit?: string;
   clientOperationId: string;
 }
 
 export interface DayContainerInput {
-  goal: "water";
+  goalId: string;
   containerId: string;
   clientOperationId: string;
 }
 
-export interface DietToggleInput {
-  clientOperationId: string;
-}
-
-export interface AmountGoalDoneToggleInput {
-  goal: "workout" | "water" | "reading";
+export interface GoalDoneToggleInput {
+  goalId: string;
   clientOperationId: string;
 }
 
@@ -75,15 +67,10 @@ export interface DayTrackingMutationService {
     localDate: string,
     input: DayEntryInput,
   ): Promise<{ deltaId: string; idempotent: boolean }>;
-  toggleDiet(
+  toggleGoalDone(
     userId: string,
     localDate: string,
-    input: DietToggleInput,
-  ): Promise<{ deltaId: string; idempotent: boolean }>;
-  toggleAmountGoalDone(
-    userId: string,
-    localDate: string,
-    input: AmountGoalDoneToggleInput,
+    input: GoalDoneToggleInput,
   ): Promise<{ deltaId: string; idempotent: boolean }>;
 }
 
@@ -112,4 +99,4 @@ export interface ContainerMutationService {
   deleteContainer(userId: string, containerId: string): Promise<void>;
 }
 
-export type { CalendarCellDTO, ContainerDTO, DayRollupDTO, RequiredGoalKey };
+export type { CalendarCellDTO, ContainerDTO, DayRollupDTO };

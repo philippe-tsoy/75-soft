@@ -1,95 +1,12 @@
-import {
-  COHORT_START_DATE,
-  READING_TARGET_PAGES,
-  REQUIRED_GOAL_KEYS,
-  WATER_TARGET_ML,
-  WORKOUT_TARGET_MINUTES,
-} from "@/lib/config/75-soft";
-import { getDayNumber, isScoredCalendarDate, type ISODate } from "@/lib/dates";
-import type {
-  DayDisplayState,
-  GoalDotState,
-  RequiredGoalKey,
-} from "@/lib/types";
-
-export interface GoalTotals {
-  workoutMinutes: number;
-  waterMl: number;
-  readingPages: number;
-  dietAttested: boolean;
-}
-
-export interface DailyBoardInput {
-  activeMember: boolean;
-  localDate: ISODate;
-  joinLocalDate: ISODate;
-  cohortStartDate?: ISODate;
-  invalidated?: boolean;
-  goalStates: GoalDotState;
-}
+import { COHORT_START_DATE } from "@/lib/config/75-soft";
+import { getDayNumber, type ISODate } from "@/lib/dates";
+import type { DayDisplayState } from "@/lib/types";
 
 export interface DailyBoardScore {
   scoreDate: ISODate;
-  goalsAchievedToday: number;
-  goalStates: GoalDotState;
+  metCount: number;
+  totalCount: number;
   eligible: boolean;
-}
-
-export function deriveGoalStates(
-  totals: GoalTotals,
-  invalidated = false,
-): GoalDotState {
-  const states: GoalDotState = {
-    workout: totals.workoutMinutes >= WORKOUT_TARGET_MINUTES,
-    water: totals.waterMl >= WATER_TARGET_ML,
-    reading: totals.readingPages >= READING_TARGET_PAGES,
-    diet: totals.dietAttested,
-  };
-
-  if (invalidated) {
-    return {
-      workout: false,
-      water: false,
-      reading: false,
-      diet: false,
-    };
-  }
-
-  return states;
-}
-
-export function countMetGoals(goalStates: GoalDotState): number {
-  return REQUIRED_GOAL_KEYS.reduce(
-    (count, key) => count + (goalStates[key] ? 1 : 0),
-    0,
-  );
-}
-
-export function calculateDailyBoardScore(
-  input: DailyBoardInput,
-): DailyBoardScore {
-  const cohortStartDate = input.cohortStartDate ?? COHORT_START_DATE;
-  const eligible =
-    input.activeMember &&
-    isScoredCalendarDate(input.localDate, input.joinLocalDate, cohortStartDate);
-  const goalStates = input.invalidated
-    ? deriveGoalStates(
-        {
-          workoutMinutes: 0,
-          waterMl: 0,
-          readingPages: 0,
-          dietAttested: false,
-        },
-        true,
-      )
-    : input.goalStates;
-
-  return {
-    scoreDate: input.localDate,
-    goalsAchievedToday: eligible ? countMetGoals(goalStates) : 0,
-    goalStates,
-    eligible,
-  };
 }
 
 export function deriveDayStatus({
@@ -97,11 +14,13 @@ export function deriveDayStatus({
   isFuture,
   isCurrentDay,
   metCount,
+  totalCount,
 }: {
   eligible: boolean;
   isFuture: boolean;
   isCurrentDay: boolean;
   metCount: number;
+  totalCount: number;
 }): DayDisplayState {
   if (!eligible) {
     return "unscored";
@@ -111,7 +30,11 @@ export function deriveDayStatus({
     return "future";
   }
 
-  if (metCount >= REQUIRED_GOAL_KEYS.length) {
+  if (totalCount === 0) {
+    return "unscored";
+  }
+
+  if (metCount === totalCount) {
     return "complete";
   }
 
@@ -124,7 +47,8 @@ export function deriveDayStatus({
 
 export interface BoardRankInput {
   userId: string;
-  goalsAchievedToday: number;
+  metCount: number;
+  totalCount: number;
   scoreDate: ISODate;
 }
 
@@ -132,20 +56,28 @@ export interface BoardRankedEntry extends BoardRankInput {
   rank: number;
 }
 
+/**
+ * Percentage of a member's own active goals met, not a raw count -- so
+ * members with different-sized goal lists compare fairly. A member with
+ * zero active goals ranks last (a bare count has nothing to divide by).
+ */
+function boardRankScore(entry: BoardRankInput): number {
+  return entry.totalCount === 0 ? -1 : entry.metCount / entry.totalCount;
+}
+
 export function rankDailyBoard(
   entries: readonly BoardRankInput[],
 ): BoardRankedEntry[] {
   const sorted = [...entries].sort(
-    (left, right) => right.goalsAchievedToday - left.goalsAchievedToday,
+    (left, right) => boardRankScore(right) - boardRankScore(left),
   );
 
   return sorted.map((entry, index) => {
     const previous = sorted[index - 1];
     const rank =
-      index > 0 && previous.goalsAchievedToday === entry.goalsAchievedToday
+      index > 0 && boardRankScore(previous) === boardRankScore(entry)
         ? sorted.findIndex(
-            (candidate) =>
-              candidate.goalsAchievedToday === entry.goalsAchievedToday,
+            (candidate) => boardRankScore(candidate) === boardRankScore(entry),
           ) + 1
         : index + 1;
 
@@ -179,13 +111,6 @@ export function rankByScore(
 
     return { ...entry, rank };
   });
-}
-
-export function requiredGoalMet(
-  key: RequiredGoalKey,
-  totals: GoalTotals,
-): boolean {
-  return deriveGoalStates(totals)[key];
 }
 
 export function getCohortDayNumber(

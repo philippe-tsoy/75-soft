@@ -1,12 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import {
-  COHORT_START_DATE,
-  READING_TARGET_PAGES,
-  REQUIRED_GOAL_KEYS,
-  WATER_TARGET_ML,
-  WORKOUT_TARGET_MINUTES,
-} from "@/lib/config/75-soft";
+import { COHORT_START_DATE } from "@/lib/config/75-soft";
 import { getDayNumber } from "@/lib/dates";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
@@ -14,9 +8,7 @@ import type {
   DayDisplayState,
   DayRollupDTO,
   DailyBoardDTO,
-  GoalDotState,
   GoalProgressDTO,
-  RequiredGoalKey,
 } from "@/lib/types";
 import type {
   DailyBoardScoreRpc,
@@ -37,8 +29,6 @@ type RpcResult = {
 type UntypedRpcClient = {
   rpc: (name: string, args?: Record<string, unknown>) => Promise<RpcResult>;
 };
-
-const requiredGoalKeys = [...REQUIRED_GOAL_KEYS] as RequiredGoalKey[];
 
 const dayStatuses: DayDisplayState[] = [
   "unscored",
@@ -104,20 +94,6 @@ function valueAt(record: Record<string, unknown>, ...keys: string[]): unknown {
   return undefined;
 }
 
-function recordAt(
-  record: Record<string, unknown>,
-  ...keys: string[]
-): Record<string, unknown> {
-  for (const key of keys) {
-    const value = record[key];
-    if (isRecord(value)) {
-      return value;
-    }
-  }
-
-  return {};
-}
-
 function stringAt(
   record: Record<string, unknown>,
   ...keys: string[]
@@ -162,139 +138,40 @@ function booleanAt(
   return undefined;
 }
 
-function goalStateFromValue(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") {
-    return value;
+function normalizeGoalProgress(value: unknown): GoalProgressDTO | null {
+  if (!isRecord(value)) {
+    return null;
   }
 
-  if (typeof value === "string") {
-    if (value.toLowerCase() === "true") {
-      return true;
-    }
-    if (value.toLowerCase() === "false") {
-      return false;
-    }
+  const id = stringAt(value, "id");
+  if (!id) {
+    return null;
   }
 
-  if (isRecord(value)) {
-    return booleanAt(value, "met", "isMet", "is_met", "completed");
-  }
-
-  return undefined;
-}
-
-function goalStatesFromRow(row: Record<string, unknown>): GoalDotState {
-  const nested = recordAt(
-    row,
-    "goalStates",
-    "goal_states",
-    "goalDots",
-    "goal_dots",
-  );
-  const goals = recordAt(row, "goals");
-  const unavailable =
-    booleanAt(row, "invalidated") === true ||
-    valueAt(row, "status", "displayState", "display_state") === "unscored";
-
-  return requiredGoalKeys.reduce<GoalDotState>(
-    (states, key) => {
-      const direct = goalStateFromValue(
-        valueAt(
-          nested,
-          key,
-          `${key}Met`,
-          `${key}_met`,
-          `${key}Completed`,
-          `${key}_completed`,
-        ),
-      );
-      const fromGoals = goalStateFromValue(
-        valueAt(goals, key, `${key}Met`, `${key}_met`),
-      );
-      const fromRow = booleanAt(
-        row,
-        `${key}Met`,
-        `${key}_met`,
-        `${key}Completed`,
-        `${key}_completed`,
-      );
-
-      states[key] = unavailable
-        ? false
-        : (direct ?? fromGoals ?? fromRow ?? false);
-      return states;
-    },
-    {
-      workout: false,
-      water: false,
-      reading: false,
-      diet: false,
-    },
-  );
-}
-
-function asGoalProgress(
-  key: RequiredGoalKey,
-  row: Record<string, unknown>,
-): GoalProgressDTO {
-  const goals = recordAt(row, "goals");
-  const progress = recordAt(goals, key);
-  const amountFields: Record<RequiredGoalKey, string[]> = {
-    workout: ["workoutMinutes", "workout_minutes"],
-    water: ["waterMl", "water_ml"],
-    reading: ["readingPages", "reading_pages"],
-    diet: ["dietAttested", "diet_attested", "dietValue", "diet_value"],
-  };
-  const targetFields: Record<RequiredGoalKey, number> = {
-    workout: WORKOUT_TARGET_MINUTES,
-    water: WATER_TARGET_ML,
-    reading: READING_TARGET_PAGES,
-    diet: 1,
-  };
-  const units: Record<
-    RequiredGoalKey,
-    "minutes" | "ml" | "pages" | "attestation"
-  > = {
-    workout: "minutes",
-    water: "ml",
-    reading: "pages",
-    diet: "attestation",
-  };
-  const state = goalStateFromValue(
-    valueAt(progress, "met", "isMet", "is_met", "completed", "value"),
-  );
-  const directAmount = numberAt(progress, "amount", "total", "value");
-  const rowAmount = numberAt(row, ...amountFields[key]);
-  const directState = goalStateFromValue(
-    valueAt(
-      row,
-      `${key}Met`,
-      `${key}_met`,
-      `${key}Completed`,
-      `${key}_completed`,
-    ),
-  );
-  const unavailable =
-    booleanAt(row, "invalidated") === true ||
-    valueAt(row, "status", "displayState", "display_state") === "unscored";
-  const derivedState = unavailable
-    ? false
-    : key === "diet"
-      ? booleanAt(row, ...amountFields[key])
-      : (directAmount ?? rowAmount) !== undefined
-        ? (directAmount ?? rowAmount)! >= targetFields[key]
-        : undefined;
+  const amount = numberAt(value, "amount");
+  const target = numberAt(value, "target");
 
   return {
-    ...((directAmount ?? rowAmount) !== undefined
-      ? { amount: directAmount ?? rowAmount }
-      : {}),
-    target: targetFields[key],
-    unit: units[key],
-    met: unavailable
-      ? false
-      : (state ?? directState ?? derivedState ?? goalStatesFromRow(row)[key]),
+    id,
+    name: stringAt(value, "name") ?? "Goal",
+    isPrivate: booleanAt(value, "isPrivate", "is_private") ?? false,
+    ...(amount !== undefined ? { amount } : {}),
+    ...(target !== undefined ? { target } : {}),
+    unit: stringAt(value, "unit") ?? null,
+    met: booleanAt(value, "met") ?? false,
+    markedDone: booleanAt(value, "markedDone", "marked_done") ?? false,
   };
+}
+
+function normalizeGoalsArray(value: unknown): GoalProgressDTO[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    const goal = normalizeGoalProgress(entry);
+    return goal ? [goal] : [];
+  });
 }
 
 function normalizeStatus(value: unknown): DayDisplayState {
@@ -311,8 +188,8 @@ export function normalizeProfile(value: unknown): {
   timezone?: string;
 } {
   const row = firstRecord(value) ?? {};
-  const nested = recordAt(row, "user", "profile");
-  const source = Object.keys(nested).length > 0 ? nested : row;
+  const nested = valueAt(row, "user", "profile");
+  const source = isRecord(nested) ? nested : row;
 
   return {
     id: stringAt(source, "id", "userId", "user_id") ?? "",
@@ -333,23 +210,11 @@ export function normalizeProfile(value: unknown): {
   };
 }
 
-export function normalizeGoalStates(value: unknown): GoalDotState {
-  return goalStatesFromRow(firstRecord(value) ?? {});
-}
-
 export function normalizeDailyBoardScore(
   value: unknown,
   fallbackScoreDate?: string,
 ): DailyBoardScoreRpc {
   const row = firstRecord(value) ?? {};
-  const goalStates = goalStatesFromRow(row);
-  const explicitCount = numberAt(
-    row,
-    "goalsAchievedToday",
-    "goals_achieved_today",
-    "metCount",
-    "met_count",
-  );
   const scoreDate =
     stringAt(row, "scoreDate", "score_date", "localDate", "local_date") ??
     fallbackScoreDate ??
@@ -357,13 +222,8 @@ export function normalizeDailyBoardScore(
 
   return {
     scoreDate,
-    goalsAchievedToday:
-      explicitCount ??
-      requiredGoalKeys.reduce(
-        (count, key) => count + (goalStates[key] ? 1 : 0),
-        0,
-      ),
-    goalStates,
+    metCount: numberAt(row, "metCount", "met_count") ?? 0,
+    totalCount: numberAt(row, "totalCount", "total_count") ?? 0,
     eligible:
       booleanAt(row, "eligible", "boardEligible", "board_eligible") ?? true,
   };
@@ -376,8 +236,6 @@ export function normalizeDayRollup(
   const row = firstRecord(value) ?? {};
   const localDate =
     stringAt(row, "localDate", "local_date") ?? fallbackLocalDate ?? "";
-  const goalStates = goalStatesFromRow(row);
-  const explicitMetCount = numberAt(row, "metCount", "met_count");
 
   return {
     localDate,
@@ -389,18 +247,9 @@ export function normalizeDayRollup(
     ),
     editable: booleanAt(row, "editable") ?? false,
     invalidated: booleanAt(row, "invalidated") ?? false,
-    goals: {
-      workout: asGoalProgress("workout", row),
-      water: asGoalProgress("water", row),
-      reading: asGoalProgress("reading", row),
-      diet: asGoalProgress("diet", row),
-    },
-    metCount:
-      explicitMetCount ??
-      requiredGoalKeys.reduce(
-        (count, key) => count + (goalStates[key] ? 1 : 0),
-        0,
-      ),
+    goals: normalizeGoalsArray(valueAt(row, "goals")),
+    metCount: numberAt(row, "metCount", "met_count") ?? 0,
+    totalCount: numberAt(row, "totalCount", "total_count") ?? 0,
   };
 }
 
@@ -526,13 +375,6 @@ export function createScoringReadAdapter(
       return normalizeCalendar(data);
     },
   };
-}
-
-export function countGoalStates(goalStates: GoalDotState): number {
-  return requiredGoalKeys.reduce(
-    (count, key) => count + (goalStates[key] ? 1 : 0),
-    0,
-  );
 }
 
 export function toDailyBoardDTO(

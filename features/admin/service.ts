@@ -34,7 +34,6 @@ import {
 } from "./validation";
 import {
   ADMIN_INVALIDATION_KIND,
-  INVALIDATED_GOAL_STATES,
   type AdminAuditEntryDTO,
   type AdminDashboardDTO,
   type AdminInvalidationDTO,
@@ -333,7 +332,7 @@ export async function invalidateAdminMemberDay(
     reason: result.reason,
     createdBy: result.createdBy,
     createdAt: result.createdAt,
-    forcedGoalStates: { ...INVALIDATED_GOAL_STATES },
+    forcedMet: false,
     dailyBoardScore: 0,
     postsRemainVisible: true,
   };
