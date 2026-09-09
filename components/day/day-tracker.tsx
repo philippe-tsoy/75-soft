@@ -1078,6 +1078,7 @@ export function DayTracker({
   return (
     <div>
       <div
+        className="min-h-[60vh]"
         onPointerCancel={handleSwipeUp}
         onPointerDown={handleSwipeDown}
         onPointerMove={handleSwipeMove}
