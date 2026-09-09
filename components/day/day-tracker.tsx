@@ -497,9 +497,49 @@ export function DayTracker({
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const swipeLockedHorizontal = useRef<boolean | null>(null);
 
+  const prefetching = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     dayCache.current[day.localDate] = day;
   }, [day]);
+
+  async function prefetchDate(targetDate: string) {
+    if (dayCache.current[targetDate] || prefetching.current.has(targetDate)) {
+      return;
+    }
+
+    prefetching.current.add(targetDate);
+    try {
+      const fetched = await requestDayApi<DayRollupDTO>(
+        `/api/day/${targetDate}`,
+      );
+      dayCache.current[targetDate] = fetched;
+    } catch {
+      // Best-effort: a real swipe to this date will retry and surface
+      // any error through goToDate instead.
+    } finally {
+      prefetching.current.delete(targetDate);
+    }
+  }
+
+  // Quietly warm the cache for the immediate neighbors of whichever day is
+  // on screen, so a swipe in either direction usually resolves instantly.
+  useEffect(() => {
+    const previous = nextSwipeDate(
+      day.localDate,
+      "previous",
+      firstViewableDate,
+      today,
+    );
+    const next = nextSwipeDate(day.localDate, "next", firstViewableDate, today);
+
+    if (previous) {
+      void prefetchDate(previous);
+    }
+    if (next) {
+      void prefetchDate(next);
+    }
+  }, [day.localDate, firstViewableDate, today]);
 
   async function goToDate(targetDate: string) {
     const cached = dayCache.current[targetDate];
@@ -574,7 +614,8 @@ export function DayTracker({
 
     setDragAnimated(true);
     if (target) {
-      setDragX(direction === "previous" ? -width : width);
+      // Keep sliding in whichever direction the finger was already moving.
+      setDragX(dragX < 0 ? -width : width);
       window.setTimeout(() => {
         setDragX(0);
         setDragAnimated(false);

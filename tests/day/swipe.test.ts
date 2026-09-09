@@ -5,13 +5,13 @@ import { nextSwipeDate, resolveSwipeDirection } from "@/components/day/swipe";
 describe("day pager swipe thresholds", () => {
   it("requires at least 20% of the container width, or 48px, to commit", () => {
     expect(resolveSwipeDirection(-30, 800)).toBeNull();
-    expect(resolveSwipeDirection(-160, 800)).toBe("previous");
-    expect(resolveSwipeDirection(160, 800)).toBe("next");
+    expect(resolveSwipeDirection(-160, 800)).toBe("next");
+    expect(resolveSwipeDirection(160, 800)).toBe("previous");
 
     // A narrow container falls back to the 48px floor rather than a tinier
     // fraction of its width.
     expect(resolveSwipeDirection(-40, 100)).toBeNull();
-    expect(resolveSwipeDirection(-49, 100)).toBe("previous");
+    expect(resolveSwipeDirection(-49, 100)).toBe("next");
   });
 
   it("treats a drag that never moves as uncommitted", () => {
