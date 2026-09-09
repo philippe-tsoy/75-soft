@@ -31,6 +31,22 @@ export function resolveSwipeDirection(
 }
 
 /**
+ * Same left/right mapping as resolveSwipeDirection, but with no distance
+ * threshold -- used mid-drag to tell whether the direction the finger is
+ * currently moving in is blocked at all, so a boundary can resist the drag
+ * instead of just springing back after release.
+ */
+export function directionForSign(deltaX: number): SwipeDirection | null {
+  if (deltaX < 0) {
+    return "next";
+  }
+  if (deltaX > 0) {
+    return "previous";
+  }
+  return null;
+}
+
+/**
  * The date a committed swipe would land on, or null if that would cross
  * the viewable range -- before the member's first scored day, or after
  * their current local "today".

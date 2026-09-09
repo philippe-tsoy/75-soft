@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { nextSwipeDate, resolveSwipeDirection } from "@/components/day/swipe";
+import {
+  directionForSign,
+  nextSwipeDate,
+  resolveSwipeDirection,
+} from "@/components/day/swipe";
 
 describe("day pager swipe thresholds", () => {
   it("requires at least 20% of the container width, or 48px, to commit", () => {
@@ -16,6 +20,14 @@ describe("day pager swipe thresholds", () => {
 
   it("treats a drag that never moves as uncommitted", () => {
     expect(resolveSwipeDirection(0, 800)).toBeNull();
+  });
+});
+
+describe("raw drag direction (no threshold)", () => {
+  it("matches the same left/right mapping as the commit threshold", () => {
+    expect(directionForSign(-1)).toBe("next");
+    expect(directionForSign(1)).toBe("previous");
+    expect(directionForSign(0)).toBeNull();
   });
 });
 

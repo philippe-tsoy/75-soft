@@ -46,7 +46,11 @@ import { normalizeWaterAmount } from "@/lib/validation";
 import { AmountSlider } from "./amount-slider";
 import { ContainerManager } from "./container-manager";
 import { GoalControl } from "./goal-control";
-import { nextSwipeDate, resolveSwipeDirection } from "./swipe";
+import {
+  directionForSign,
+  nextSwipeDate,
+  resolveSwipeDirection,
+} from "./swipe";
 
 export interface DayTrackerProps {
   initialDay: DayRollupDTO;
@@ -567,6 +571,12 @@ export function DayTracker({
     if (dayLoading) {
       return;
     }
+    // Let the amount slider's own drag own this gesture instead of also
+    // paging the day underneath it.
+    if ((event.target as HTMLElement).closest('input[type="range"]')) {
+      swipeStart.current = null;
+      return;
+    }
     swipeStart.current = { x: event.clientX, y: event.clientY };
     swipeLockedHorizontal.current = null;
     setDragAnimated(false);
@@ -594,7 +604,14 @@ export function DayTracker({
       event.currentTarget.setPointerCapture(event.pointerId);
     }
 
-    setDragX(deltaX);
+    // A boundary (no earlier/later day to land on) resists the drag
+    // entirely, rather than following the finger and springing back.
+    const rawDirection = directionForSign(deltaX);
+    const blocked = Boolean(
+      rawDirection &&
+      !nextSwipeDate(day.localDate, rawDirection, firstViewableDate, today),
+    );
+    setDragX(blocked ? 0 : deltaX);
   }
 
   function handleSwipeUp() {
