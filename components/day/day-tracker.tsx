@@ -2,12 +2,24 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { AchievementToast } from "@/components/achievements";
 import { createGoal, fetchGoalTemplates, GoalForm } from "@/components/goals";
 import { Sheet } from "@/components/sheets/sheet";
-import { Button, Card, CardHeader, CardTitle, Input, Label } from "@/components/ui";
+import {
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+} from "@/components/ui";
 import {
   DayApiError,
   requestDayApi,
@@ -34,6 +46,7 @@ import { normalizeWaterAmount } from "@/lib/validation";
 import { AmountSlider } from "./amount-slider";
 import { ContainerManager } from "./container-manager";
 import { GoalControl } from "./goal-control";
+import { nextSwipeDate, resolveSwipeDirection } from "./swipe";
 
 export interface DayTrackerProps {
   initialDay: DayRollupDTO;
@@ -43,6 +56,8 @@ export interface DayTrackerProps {
   amountInputMode: AmountInputMode;
   /** False only when the member has never added a goal at all. */
   hasAnyGoals: boolean;
+  /** The earliest date this member can swipe back to. */
+  firstViewableDate: string;
 }
 
 interface DayMutationResponse {
@@ -333,9 +348,7 @@ function ContainerStepper({
 function EmptyGoalsState({ userId }: { userId: string }) {
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
-  const [addingTemplateId, setAddingTemplateId] = useState<string | null>(
-    null,
-  );
+  const [addingTemplateId, setAddingTemplateId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const templatesQuery = useQuery({
     queryKey: queryKeys.goalTemplates(),
@@ -455,15 +468,16 @@ export function DayTracker({
   today,
   amountInputMode,
   hasAnyGoals,
+  firstViewableDate,
 }: DayTrackerProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [day, setDay] = useState(initialDay);
   const [containers, setContainers] = useState(initialContainers);
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [goalErrors, setGoalErrors] = useState<
-    Record<string, GoalErrorState>
-  >({});
+  const [goalErrors, setGoalErrors] = useState<Record<string, GoalErrorState>>(
+    {},
+  );
   const [containersOpen, setContainersOpen] = useState(false);
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
@@ -471,6 +485,105 @@ export function DayTracker({
     {},
   );
   const useSliders = amountInputMode === "slider";
+
+  const dayCache = useRef<Record<string, DayRollupDTO>>({
+    [initialDay.localDate]: initialDay,
+  });
+  const [dayLoading, setDayLoading] = useState(false);
+  const [dayLoadError, setDayLoadError] = useState<string | null>(null);
+  const [dragX, setDragX] = useState(0);
+  const [dragAnimated, setDragAnimated] = useState(false);
+  const swipeContainerRef = useRef<HTMLDivElement>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const swipeLockedHorizontal = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    dayCache.current[day.localDate] = day;
+  }, [day]);
+
+  async function goToDate(targetDate: string) {
+    const cached = dayCache.current[targetDate];
+    if (cached) {
+      setDay(cached);
+      return;
+    }
+
+    setDayLoading(true);
+    setDayLoadError(null);
+    try {
+      const fetched = await requestDayApi<DayRollupDTO>(
+        `/api/day/${targetDate}`,
+      );
+      dayCache.current[targetDate] = fetched;
+      setDay(fetched);
+    } catch (requestError) {
+      setDayLoadError(apiErrorMessage(requestError));
+    } finally {
+      setDayLoading(false);
+    }
+  }
+
+  function handleSwipeDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dayLoading) {
+      return;
+    }
+    swipeStart.current = { x: event.clientX, y: event.clientY };
+    swipeLockedHorizontal.current = null;
+    setDragAnimated(false);
+  }
+
+  function handleSwipeMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = swipeStart.current;
+    if (!start || swipeLockedHorizontal.current === false) {
+      return;
+    }
+
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+
+    if (swipeLockedHorizontal.current === null) {
+      if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) {
+        return;
+      }
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        // A vertical gesture (scrolling): stop tracking this touch entirely.
+        swipeLockedHorizontal.current = false;
+        return;
+      }
+      swipeLockedHorizontal.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
+    setDragX(deltaX);
+  }
+
+  function handleSwipeUp() {
+    const wasHorizontal = swipeLockedHorizontal.current === true;
+    swipeStart.current = null;
+    swipeLockedHorizontal.current = null;
+
+    if (!wasHorizontal) {
+      return;
+    }
+
+    const width = swipeContainerRef.current?.offsetWidth || 320;
+    const direction = resolveSwipeDirection(dragX, width);
+    const target = direction
+      ? nextSwipeDate(day.localDate, direction, firstViewableDate, today)
+      : null;
+
+    setDragAnimated(true);
+    if (target) {
+      setDragX(direction === "previous" ? -width : width);
+      window.setTimeout(() => {
+        setDragX(0);
+        setDragAnimated(false);
+        void goToDate(target);
+      }, 180);
+    } else {
+      setDragX(0);
+    }
+  }
 
   function isPending(goalId: string): boolean {
     return Boolean(pending[goalId]);
@@ -521,7 +634,9 @@ export function DayTracker({
 
     const operation = withOperationId(retryOperationId);
     const optimisticAmount =
-      unit === "ml" || unit === "l" ? normalizeWaterAmount(amount, unit) : amount;
+      unit === "ml" || unit === "l"
+        ? normalizeWaterAmount(amount, unit)
+        : amount;
     setDay((prevDay) =>
       applyOptimisticAmount(prevDay, goalId, optimisticAmount, today),
     );
@@ -738,179 +853,213 @@ export function DayTracker({
 
   function isAmountToggleLocked(goalId: string): boolean {
     const progress = day.goals.find((goal) => goal.id === goalId);
-    if (!progress || progress.amount === undefined || progress.target === undefined) {
+    if (
+      !progress ||
+      progress.amount === undefined ||
+      progress.target === undefined
+    ) {
       return false;
     }
 
     return (
-      progress.amount >= progress.target &&
-      preFillAmount[goalId] === undefined
+      progress.amount >= progress.target && preFillAmount[goalId] === undefined
     );
   }
 
-  if (day.goals.length === 0) {
-    return hasAnyGoals ? (
-      <NoGoalsActiveState localDate={day.localDate} />
+  const percentComplete =
+    day.totalCount > 0 ? Math.round((day.metCount / day.totalCount) * 100) : 0;
+
+  const content =
+    day.goals.length === 0 ? (
+      hasAnyGoals ? (
+        <NoGoalsActiveState localDate={day.localDate} />
+      ) : (
+        <EmptyGoalsState userId={userId} />
+      )
     ) : (
-      <EmptyGoalsState userId={userId} />
-    );
-  }
-
-  const percentComplete = Math.round((day.metCount / day.totalCount) * 100);
-
-  return (
-    <div className="space-y-4 pb-6">
-      <div className="pt-4">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <p className="text-muted text-sm font-semibold tracking-wide">
-              Day
-            </p>
-            <h1 className="text-4xl font-bold tracking-tight">
-              {day.dayNumber}
-            </h1>
+      <div className="space-y-4 pb-6">
+        <div className="pt-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-muted text-sm font-semibold tracking-wide">
+                Day
+              </p>
+              <h1 className="text-4xl font-bold tracking-tight">
+                {day.dayNumber}
+              </h1>
+            </div>
+            <div className="text-right">
+              <p className="text-muted text-sm font-semibold tracking-wide">
+                Complete
+              </p>
+              <p className="text-4xl font-bold tracking-tight">
+                {percentComplete}%
+              </p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-muted text-sm font-semibold tracking-wide">
-              Complete
-            </p>
-            <p className="text-4xl font-bold tracking-tight">
-              {percentComplete}%
-            </p>
-          </div>
-        </div>
-        <div
-          aria-valuemax={100}
-          aria-valuemin={0}
-          aria-valuenow={percentComplete}
-          aria-valuetext={`${day.metCount} of ${day.totalCount} goals met`}
-          className="bg-surface-accent mt-4 h-3 w-full overflow-hidden rounded-full"
-          role="progressbar"
-        >
           <div
-            className="bg-primary h-full rounded-full transition-[width] duration-300"
-            style={{ width: `${percentComplete}%` }}
-          />
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={percentComplete}
+            aria-valuetext={`${day.metCount} of ${day.totalCount} goals met`}
+            className="bg-surface-accent mt-4 h-3 w-full overflow-hidden rounded-full"
+            role="progressbar"
+          >
+            <div
+              className="bg-primary h-full rounded-full transition-[width] duration-300"
+              style={{ width: `${percentComplete}%` }}
+            />
+          </div>
+          {!day.editable ? (
+            <p className="text-muted mt-3 rounded-xl bg-slate-100 p-3 text-sm">
+              This day is view-only. Only today and yesterday can be changed.
+            </p>
+          ) : null}
+          {day.invalidated ? (
+            <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">
+              This day was invalidated by an administrator.
+            </p>
+          ) : null}
         </div>
-        {!day.editable ? (
-          <p className="text-muted mt-3 rounded-xl bg-slate-100 p-3 text-sm">
-            This day is view-only. Only today and yesterday can be changed.
-          </p>
-        ) : null}
-        {day.invalidated ? (
-          <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">
-            This day was invalidated by an administrator.
-          </p>
-        ) : null}
-      </div>
 
-      {day.goals.map((goal) => {
-        const goalPending = isPending(goal.id) || !day.editable;
-        const goalErrorState = goalErrors[goal.id];
-        const isNumeric = goal.target !== undefined;
-        const unit = goal.unit ?? "";
-        const showContainers = isNumeric && isMlGoal(goal);
+        {day.goals.map((goal) => {
+          const goalPending = isPending(goal.id) || !day.editable;
+          const goalErrorState = goalErrors[goal.id];
+          const isNumeric = goal.target !== undefined;
+          const unit = goal.unit ?? "";
+          const showContainers = isNumeric && isMlGoal(goal);
 
-        if (!isNumeric) {
+          if (!isNumeric) {
+            return (
+              <GoalControl
+                error={goalErrorState?.message}
+                key={goal.id}
+                onRetry={goalErrorState?.retry}
+                onToggleDone={() => void toggleGoalDone(goal.id)}
+                pending={goalPending}
+                progress={goal}
+                sessionExpired={goalErrorState?.sessionExpired}
+                title={goal.name}
+              />
+            );
+          }
+
+          const target = goal.target ?? 0;
+
           return (
             <GoalControl
               error={goalErrorState?.message}
               key={goal.id}
               onRetry={goalErrorState?.retry}
-              onToggleDone={() => void toggleGoalDone(goal.id)}
+              onToggleDone={() => toggleAmountFill(goal.id, unit)}
               pending={goalPending}
               progress={goal}
               sessionExpired={goalErrorState?.sessionExpired}
               title={goal.name}
-            />
+              titleAction={
+                showContainers ? (
+                  <Button
+                    aria-label={`Manage ${goal.name} containers`}
+                    className="min-h-0 px-2 py-1 text-xs"
+                    disabled={isPending(goal.id)}
+                    onClick={() => setContainersOpen(true)}
+                    variant="ghost"
+                  >
+                    Containers
+                  </Button>
+                ) : undefined
+              }
+              toggleLocked={isAmountToggleLocked(goal.id)}
+            >
+              {useSliders ? (
+                <AmountSlider
+                  disabled={goalPending}
+                  label={goal.name}
+                  onCommit={(next) => setAmountTo(goal.id, next, unit)}
+                  step={showContainers ? 50 : 1}
+                  target={target}
+                  unitLabel={unit}
+                  value={goal.amount ?? 0}
+                />
+              ) : (
+                <>
+                  {quickAmountsFor(target).map((amount) => (
+                    <AmountStepper
+                      amount={amount}
+                      key={amount}
+                      label={goal.name}
+                      onAdjust={(signed) =>
+                        void addAmount(goal.id, signed, unit)
+                      }
+                      pending={goalPending}
+                      unitLabel={unit}
+                    />
+                  ))}
+                  {showContainers
+                    ? containers.map((container) => (
+                        <ContainerStepper
+                          container={container}
+                          key={container.id}
+                          onAddContainer={() =>
+                            void addContainer(goal.id, container)
+                          }
+                          onRemoveContainer={() =>
+                            void addAmount(goal.id, -container.volumeMl, "ml")
+                          }
+                          pending={goalPending}
+                        />
+                      ))
+                    : null}
+                  {showContainers ? (
+                    <CustomWaterAmountForm
+                      id={`${goal.id}-custom-amount`}
+                      onAdd={(amount, addUnit) =>
+                        void addAmount(goal.id, amount, addUnit)
+                      }
+                      pending={goalPending}
+                    />
+                  ) : (
+                    <CustomAmountForm
+                      id={`${goal.id}-custom-amount`}
+                      inputLabel={`${goal.name} amount to add or remove`}
+                      onAdd={(amount) => void addAmount(goal.id, amount, unit)}
+                      pending={goalPending}
+                    />
+                  )}
+                </>
+              )}
+            </GoalControl>
           );
-        }
+        })}
+      </div>
+    );
 
-        const target = goal.target ?? 0;
+  return (
+    <div>
+      <div
+        onPointerCancel={handleSwipeUp}
+        onPointerDown={handleSwipeDown}
+        onPointerMove={handleSwipeMove}
+        onPointerUp={handleSwipeUp}
+        ref={swipeContainerRef}
+        style={{ touchAction: "pan-y" }}
+      >
+        <div
+          style={{
+            transform: dragX ? `translateX(${dragX}px)` : undefined,
+            transition: dragAnimated ? "transform 180ms ease-out" : "none",
+            opacity: dayLoading ? 0.5 : 1,
+          }}
+        >
+          {content}
+        </div>
+      </div>
 
-        return (
-          <GoalControl
-            error={goalErrorState?.message}
-            key={goal.id}
-            onRetry={goalErrorState?.retry}
-            onToggleDone={() => toggleAmountFill(goal.id, unit)}
-            pending={goalPending}
-            progress={goal}
-            sessionExpired={goalErrorState?.sessionExpired}
-            title={goal.name}
-            titleAction={
-              showContainers ? (
-                <Button
-                  aria-label={`Manage ${goal.name} containers`}
-                  className="min-h-0 px-2 py-1 text-xs"
-                  disabled={isPending(goal.id)}
-                  onClick={() => setContainersOpen(true)}
-                  variant="ghost"
-                >
-                  Containers
-                </Button>
-              ) : undefined
-            }
-            toggleLocked={isAmountToggleLocked(goal.id)}
-          >
-            {useSliders ? (
-              <AmountSlider
-                disabled={goalPending}
-                label={goal.name}
-                onCommit={(next) => setAmountTo(goal.id, next, unit)}
-                step={showContainers ? 50 : 1}
-                target={target}
-                unitLabel={unit}
-                value={goal.amount ?? 0}
-              />
-            ) : (
-              <>
-                {quickAmountsFor(target).map((amount) => (
-                  <AmountStepper
-                    amount={amount}
-                    key={amount}
-                    label={goal.name}
-                    onAdjust={(signed) => void addAmount(goal.id, signed, unit)}
-                    pending={goalPending}
-                    unitLabel={unit}
-                  />
-                ))}
-                {showContainers
-                  ? containers.map((container) => (
-                      <ContainerStepper
-                        container={container}
-                        key={container.id}
-                        onAddContainer={() =>
-                          void addContainer(goal.id, container)
-                        }
-                        onRemoveContainer={() =>
-                          void addAmount(goal.id, -container.volumeMl, "ml")
-                        }
-                        pending={goalPending}
-                      />
-                    ))
-                  : null}
-                {showContainers ? (
-                  <CustomWaterAmountForm
-                    id={`${goal.id}-custom-amount`}
-                    onAdd={(amount, addUnit) =>
-                      void addAmount(goal.id, amount, addUnit)
-                    }
-                    pending={goalPending}
-                  />
-                ) : (
-                  <CustomAmountForm
-                    id={`${goal.id}-custom-amount`}
-                    inputLabel={`${goal.name} amount to add or remove`}
-                    onAdd={(amount) => void addAmount(goal.id, amount, unit)}
-                    pending={goalPending}
-                  />
-                )}
-              </>
-            )}
-          </GoalControl>
-        );
-      })}
+      {dayLoadError ? (
+        <p className="mt-2 text-sm text-red-700" role="alert">
+          {dayLoadError}
+        </p>
+      ) : null}
 
       <Sheet
         onClose={() => setContainersOpen(false)}

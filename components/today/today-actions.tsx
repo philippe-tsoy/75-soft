@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -61,18 +60,9 @@ export function TodayActions({
 
   return (
     <>
-      {allowYesterday ? (
-        <Link
-          className="text-muted hover:text-foreground focus-visible:ring-primary inline-block text-xs font-semibold outline-none focus-visible:ring-2"
-          href="/yesterday"
-        >
-          Review yesterday
-        </Link>
-      ) : null}
-
       <button
         aria-label="Post an update"
-        className="bg-primary text-primary-foreground focus-visible:ring-primary fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-95"
+        className="bg-primary text-primary-foreground focus-visible:ring-primary fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform outline-none hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-95"
         onClick={() => setComposerOpen(true)}
         type="button"
       >

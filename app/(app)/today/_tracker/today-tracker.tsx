@@ -1,6 +1,7 @@
 import { requireActiveMember } from "@/lib/auth/access";
 
 import { DayTracker } from "@/components/day/day-tracker";
+import { COHORT_START_DATE } from "@/lib/config/75-soft";
 import { createDayTrackingServices } from "@/features/day-tracking";
 import { listGoalRows } from "@/features/goals/database";
 import { getCurrentAmountInputMode } from "@/features/profiles/service";
@@ -26,10 +27,15 @@ export async function TodayTracker({
     getCurrentAmountInputMode(),
     listGoalRows(access.user.id),
   ]);
+  const firstViewableDate =
+    access.membership.joinLocalDate > COHORT_START_DATE
+      ? access.membership.joinLocalDate
+      : COHORT_START_DATE;
 
   return (
     <DayTracker
       amountInputMode={amountInputMode}
+      firstViewableDate={firstViewableDate}
       hasAnyGoals={goalRows.length > 0}
       initialContainers={savedContainers}
       initialDay={day}
