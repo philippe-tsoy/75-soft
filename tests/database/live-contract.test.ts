@@ -65,6 +65,7 @@ describe("W8 live database contract", () => {
       ],
       ["get_board", { viewer_id: probeUserId }],
       ["get_feed_page", { viewer_id: probeUserId, cursor: null, limit: 20 }],
+      ["get_member_stats", { user_id: probeUserId }],
     ] as const;
 
     for (const [functionName, args] of rpcCalls) {

@@ -13,26 +13,26 @@ test.describe("W8 authenticated member browser smoke", () => {
     "[W8 E2E] Set W8_E2E_MEMBER_STORAGE_STATE to a real authenticated Playwright storage state.",
   );
 
-  test("navigates the Today, Feed, Ranking, and Me journeys", async ({
+  test("navigates the Today, Feed, Stats, and Me journeys", async ({
     page,
   }) => {
     await page.goto("/today");
-    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    await expect(page).toHaveURL(/\/today$/);
 
     const navigation = page.getByRole("navigation", {
       name: "Primary navigation",
     });
     await expect(navigation.getByRole("link", { name: "Today" })).toBeVisible();
     await expect(navigation.getByRole("link", { name: "Feed" })).toBeVisible();
-    await expect(navigation.getByRole("link", { name: "Ranking" })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: "Stats" })).toBeVisible();
 
     await navigation.getByRole("link", { name: "Feed" }).click();
     await expect(page).toHaveURL(/\/feed$/);
     await expect(page.getByRole("heading", { name: "Feed" })).toBeVisible();
 
-    await navigation.getByRole("link", { name: "Ranking" }).click();
-    await expect(page).toHaveURL(/\/board$/);
-    await expect(page.getByRole("heading", { name: "Ranking" })).toBeVisible();
+    await navigation.getByRole("link", { name: "Stats" }).click();
+    await expect(page).toHaveURL(/\/stats$/);
+    await expect(page.getByRole("heading", { name: "Stats" })).toBeVisible();
 
     await page.getByRole("link", { name: "Open Me" }).click();
     await expect(page).toHaveURL(/\/me$/);
@@ -47,7 +47,7 @@ test.describe("W8 authenticated member browser smoke", () => {
     const navigation = page.getByRole("navigation", {
       name: "Primary navigation",
     });
-    for (const label of ["Today", "Feed", "Ranking"]) {
+    for (const label of ["Today", "Feed", "Stats"]) {
       const link = navigation.getByRole("link", { name: label });
       await link.focus();
       await expect(link).toBeFocused();
@@ -65,7 +65,7 @@ test.describe("W8 authenticated member browser smoke", () => {
   test("runs automated accessibility checks on primary member screens", async ({
     page,
   }) => {
-    for (const path of ["/today", "/feed", "/board", "/me"]) {
+    for (const path of ["/today", "/feed", "/stats", "/me"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await page.addScriptTag({ content: axe.source });

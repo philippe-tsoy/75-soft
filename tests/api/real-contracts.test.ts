@@ -195,6 +195,15 @@ describe("W8 real API request contracts", () => {
       );
       expect(boardBody.data).toBeInstanceOf(Array);
       assertNoPrivateResponseFields(boardBody);
+
+      const statsBody = asRecord(
+        await readResponseBody(
+          await apiRequest("/api/stats", {}, apiTestConfig.memberCookie),
+        ),
+        "stats response",
+      );
+      expect(statsBody.data).toBeTruthy();
+      assertNoPrivateResponseFields(statsBody);
     });
 
     it("does not expose private implementation fields from admin DTOs", async () => {

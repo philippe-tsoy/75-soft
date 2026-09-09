@@ -158,6 +158,25 @@ export interface TeamBoardEntryDTO {
   pct: number;
 }
 
+export interface MemberGoalStatDTO {
+  goalId: string;
+  /** "Secret goal" for a goal that was private at any point in its history. */
+  name: string;
+  isPrivate: boolean;
+  active: boolean;
+  metDays: number;
+  eligibleDays: number;
+  pct: number;
+}
+
+export interface MemberStatsDTO {
+  dayNumber: number;
+  metDays: number;
+  eligibleDays: number;
+  pct: number;
+  goals: MemberGoalStatDTO[];
+}
+
 export interface TeamRosterMemberDTO {
   userId: string;
   profile: ProfileDTO;

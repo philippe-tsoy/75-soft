@@ -32,7 +32,7 @@ function TodayIcon({ className }: TabIconProps) {
   );
 }
 
-function RankingIcon({ className }: TabIconProps) {
+function StatsIcon({ className }: TabIconProps) {
   return (
     <svg
       aria-hidden="true"
@@ -44,11 +44,9 @@ function RankingIcon({ className }: TabIconProps) {
       strokeWidth={1.8}
       viewBox="0 0 24 24"
     >
-      <path d="M7 4h10v4a5 5 0 0 1-10 0V4z" />
-      <path d="M7 5H4v1a3 3 0 0 0 3 3" />
-      <path d="M17 5h3v1a3 3 0 0 1-3 3" />
-      <path d="M12 13v4" />
-      <path d="M9 21h6" />
+      <path d="M5 20V10" />
+      <path d="M12 20V4" />
+      <path d="M19 20v-7" />
     </svg>
   );
 }
@@ -75,7 +73,7 @@ function FeedIcon({ className }: TabIconProps) {
 
 const tabs = [
   { href: "/today", label: "Today", Icon: TodayIcon },
-  { href: "/board", label: "Ranking", Icon: RankingIcon },
+  { href: "/stats", label: "Stats", Icon: StatsIcon },
   { href: "/feed", label: "Feed", Icon: FeedIcon },
 ] as const;
 
@@ -156,9 +154,7 @@ export function AppShell({
                 <span
                   className={cn(
                     "flex h-9 w-14 items-center justify-center rounded-full transition-colors",
-                    active
-                      ? "bg-surface-accent text-primary"
-                      : "text-muted",
+                    active ? "bg-surface-accent text-primary" : "text-muted",
                   )}
                 >
                   <Icon className="h-5 w-5" />

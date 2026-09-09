@@ -8,6 +8,7 @@ export const queryKeys = {
   groupStrip: (asOfLocalDate: string) =>
     ["group-strip", asOfLocalDate] as const,
   board: (asOfInstantBucket: string) => ["board", asOfInstantBucket] as const,
+  stats: (userId: string) => ["stats", userId] as const,
   feed: (cursor: string | null) => ["feed", cursor] as const,
   post: (postId: string) => ["post", postId] as const,
   person: (userId: string) => ["person", userId] as const,
