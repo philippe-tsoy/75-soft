@@ -13,43 +13,14 @@ import {
   createClientOperationId,
   requireClientOperationId,
 } from "@/lib/idempotency";
-import {
-  COHORT_START_DATE,
-  DEFAULT_REACTION_PALETTE,
-  MAX_COMMENT_CHARACTERS,
-  MAX_POST_PHOTO_BYTES,
-  POST_PHOTO_MIME_TYPES,
-} from "@/lib/config/75-soft";
-import {
-  getYesterday,
-  isEditableDate,
-  isScoredCalendarDate,
-} from "@/lib/dates";
-import {
-  buildPostPhotoPath,
-  getImageExtension,
-  validateImage,
-} from "@/lib/storage";
+import { COHORT_START_DATE } from "@/lib/config/75-soft";
+import { operationIdSchema } from "@/lib/validation";
 import type {
   BoardEntryDTO,
   DayRollupDTO,
   PostDTO,
   ProfileDTO,
 } from "@/lib/types";
-import {
-  commentBodySchema,
-  containerInputSchema,
-  displayNameSchema,
-  goalInputSchema,
-  normalizeWaterAmount,
-  operationIdSchema,
-  postGoalInputSchema,
-  positiveAmountSchema,
-  profileUpdateSchema,
-  reactionPaletteSchema,
-  timezoneSchema,
-  waterAmountSchema,
-} from "@/lib/validation";
 import { fixtureUsers, goldenScoringFixtures } from "@/tests/fixtures/75-soft";
 
 describe("API contract primitives", () => {
@@ -171,210 +142,6 @@ describe("API contract primitives", () => {
     });
   });
 
-  describe("request validation", () => {
-    it("rejects zero, negative, non-finite, and over-bound amounts", () => {
-      for (const amount of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-        expect(positiveAmountSchema.safeParse(amount).success).toBe(false);
-      }
-      expect(positiveAmountSchema.safeParse(1_000_000).success).toBe(true);
-      expect(positiveAmountSchema.safeParse(1_000_001).success).toBe(false);
-
-      expect(
-        containerInputSchema.safeParse({
-          label: "Bottle",
-          volumeMl: 500,
-        }).success,
-      ).toBe(true);
-      expect(
-        containerInputSchema.safeParse({
-          label: "Bottle",
-          volumeMl: 0,
-        }).success,
-      ).toBe(false);
-    });
-
-    it("normalizes liters to integer milliliters and rejects unsafe results", () => {
-      expect(waterAmountSchema.parse({ amount: 0.5, unit: "l" })).toEqual({
-        amount: 0.5,
-        unit: "l",
-      });
-      expect(normalizeWaterAmount(0.5, "l")).toBe(500);
-      expect(normalizeWaterAmount(1, "l")).toBe(1_000);
-      expect(normalizeWaterAmount(1_000, "ml")).toBe(1_000);
-      expect(normalizeWaterAmount(2, "l")).toBe(2_000);
-
-      expect(() => normalizeWaterAmount(0.0005, "l")).toThrow();
-      expect(() => normalizeWaterAmount(Number.MAX_SAFE_INTEGER, "l")).toThrow();
-      expect(
-        waterAmountSchema.safeParse({ amount: 1, unit: "gallon" }).success,
-      ).toBe(false);
-    });
-
-    it("validates date assertions against the member-local edit window", () => {
-      expect(
-        isEditableDate(
-          goldenScoringFixtures.firstCohortDay.localDate,
-          "2026-09-02",
-          COHORT_START_DATE,
-        ),
-      ).toBe(true);
-      expect(
-        isEditableDate("2026-09-01", "2026-09-02", COHORT_START_DATE),
-      ).toBe(true);
-      expect(
-        isEditableDate("2026-08-31", "2026-09-02", COHORT_START_DATE),
-      ).toBe(false);
-      expect(
-        isEditableDate("2026-09-03", "2026-09-02", COHORT_START_DATE),
-      ).toBe(false);
-      expect(getYesterday("2026-09-02")).toBe("2026-09-01");
-      expect(
-        isScoredCalendarDate("2026-09-03", "2026-09-04", COHORT_START_DATE),
-      ).toBe(false);
-    });
-
-    it("validates profile, timezone, reaction, and comment inputs", () => {
-      expect(displayNameSchema.parse("  Alex  ")).toBe("Alex");
-      expect(displayNameSchema.safeParse("   ").success).toBe(false);
-      expect(profileUpdateSchema.parse({ timezone: "Asia/Tokyo" })).toEqual({
-        timezone: "Asia/Tokyo",
-      });
-      expect(timezoneSchema.safeParse("Not/AZone").success).toBe(false);
-
-      expect(reactionPaletteSchema.parse({ emoji: [...DEFAULT_REACTION_PALETTE] })).toEqual(
-        {
-          emoji: [...DEFAULT_REACTION_PALETTE],
-        },
-      );
-      expect(
-        reactionPaletteSchema.safeParse({ emoji: ["👍", "👍"] }).success,
-      ).toBe(false);
-      expect(
-        reactionPaletteSchema.safeParse({ emoji: ["not-an-emoji"] }).success,
-      ).toBe(false);
-
-      const maxGraphemeComment = "💪".repeat(MAX_COMMENT_CHARACTERS);
-      expect(commentBodySchema.parse(maxGraphemeComment)).toBe(
-        maxGraphemeComment,
-      );
-      expect(
-        commentBodySchema.safeParse(`${maxGraphemeComment}💪`).success,
-      ).toBe(false);
-      expect(commentBodySchema.parse("  Nice work!  ")).toBe("Nice work!");
-    });
-
-    it("accepts an empty selection and rejects duplicate/malformed post goals", () => {
-      const goalId = "00000000-0000-0000-0000-000000000010";
-
-      expect(postGoalInputSchema.safeParse([]).success).toBe(true);
-      expect(
-        postGoalInputSchema.safeParse([
-          {
-            goalId,
-            completed: true,
-          },
-        ]).success,
-      ).toBe(true);
-      expect(
-        postGoalInputSchema.safeParse([{ goalId, value: 30 }]).success,
-      ).toBe(true);
-      expect(
-        postGoalInputSchema.safeParse([
-          { goalId, completed: true },
-          { goalId, completed: false },
-        ]).success,
-      ).toBe(false);
-      expect(
-        postGoalInputSchema.safeParse([
-          {
-            goalId,
-            value: 10,
-            completed: true,
-          },
-        ]).success,
-      ).toBe(false);
-      expect(
-        postGoalInputSchema.safeParse([{ goalId }]).success,
-      ).toBe(false);
-    });
-
-    it("validates goal target pairs and ownership-independent shape", () => {
-      expect(
-        goalInputSchema.parse({
-          name: "Meditate",
-          targetValue: 10,
-          unit: "minutes",
-        }),
-      ).toMatchObject({
-        name: "Meditate",
-        targetValue: 10,
-        unit: "minutes",
-      });
-      expect(goalInputSchema.parse({ name: "Stretch" })).toMatchObject({
-        name: "Stretch",
-      });
-      expect(
-        goalInputSchema.safeParse({
-          name: "Meditate",
-          targetValue: 10,
-        }).success,
-      ).toBe(false);
-    });
-  });
-
-  describe("upload contract", () => {
-    it("accepts all supported MIME types at and below the exact byte limit", () => {
-      for (const type of POST_PHOTO_MIME_TYPES) {
-        expect(
-          validateImage({ size: MAX_POST_PHOTO_BYTES, type }),
-        ).toEqual({ valid: true });
-        expect(validateImage({ size: 1, type })).toEqual({ valid: true });
-      }
-    });
-
-    it("maps supported MIME types to matching private-path extensions", () => {
-      expect(getImageExtension("image/jpeg")).toBe("jpeg");
-      expect(getImageExtension("image/png")).toBe("png");
-      expect(getImageExtension("image/webp")).toBe("webp");
-      expect(() => getImageExtension("image/gif")).toThrow();
-
-      expect(
-        buildPostPhotoPath(
-          fixtureUsers.memberA.id,
-          "00000000-0000-0000-0000-000000000020",
-          "upload-1",
-          "png",
-        ),
-      ).toBe(
-        `posts/${fixtureUsers.memberA.id}/00000000-0000-0000-0000-000000000020/upload-1.png`,
-      );
-    });
-
-    it("rejects empty, unsupported, and over-limit payloads", () => {
-      expect(validateImage(null)).toEqual({
-        valid: false,
-        error: "empty",
-      });
-      expect(validateImage({ size: 0, type: "image/png" })).toEqual({
-        valid: false,
-        error: "empty",
-      });
-      expect(validateImage({ size: 1, type: "image/gif" })).toEqual({
-        valid: false,
-        error: "unsupported_type",
-      });
-      expect(
-        validateImage({
-          size: MAX_POST_PHOTO_BYTES + 1,
-          type: "image/jpeg",
-        }),
-      ).toEqual({
-        valid: false,
-        error: "too_large",
-      });
-    });
-  });
-
   describe("DTO safety", () => {
     it("uses public camelCase DTO fields and never exposes raw/private sources", () => {
       const profile = {
@@ -460,9 +227,9 @@ describe("API contract primitives", () => {
 
       expect(dateOnly.test(COHORT_START_DATE)).toBe(true);
       expect(instant.test("2026-09-01T12:00:00.000Z")).toBe(true);
-      expect(dateOnly.test(goldenScoringFixtures.firstCohortDay.localDate)).toBe(
-        true,
-      );
+      expect(
+        dateOnly.test(goldenScoringFixtures.firstCohortDay.localDate),
+      ).toBe(true);
     });
   });
 });

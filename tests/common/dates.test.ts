@@ -6,6 +6,7 @@ import {
   getMemberLocalDate,
   getYesterday,
   isEditableDate,
+  isScoredCalendarDate,
   isValidISODate,
 } from "@/lib/dates";
 
@@ -39,14 +40,36 @@ describe("common date utilities", () => {
     );
   });
 
-  it("validates ISO calendar dates and formats instants for viewers", () => {
+  it("scores a date only on or after both the join date and cohort start", () => {
+    expect(isScoredCalendarDate("2026-09-03", "2026-09-01", "2026-09-01")).toBe(
+      true,
+    );
+    expect(isScoredCalendarDate("2026-09-03", "2026-09-04", "2026-09-01")).toBe(
+      false,
+    );
+    expect(isScoredCalendarDate("2026-09-03", "2026-09-01", "2026-09-04")).toBe(
+      false,
+    );
+  });
+
+  it("validates ISO calendar dates and formats instants per viewer timezone", () => {
     expect(isValidISODate("2026-02-28")).toBe(true);
     expect(isValidISODate("2026-02-30")).toBe(false);
+
+    // The same stored instant renders as different calendar dates for
+    // viewers in different timezones.
+    const instant = "2026-09-02T03:59:00.000Z";
     expect(
-      formatInstantForViewer("2026-09-02T03:59:00.000Z", "America/New_York", {
+      formatInstantForViewer(instant, "America/New_York", {
         dateStyle: "short",
         timeStyle: "short",
       }),
     ).toContain("9/1/26");
+    expect(
+      formatInstantForViewer(instant, "Asia/Tokyo", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }),
+    ).toContain("9/2/26");
   });
 });

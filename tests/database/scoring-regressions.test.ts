@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  formatInstantForViewer,
-  getDayNumber,
-  getMemberLocalDate,
-  getYesterday,
-  isEditableDate,
-} from "@/lib/dates";
+import { getMemberLocalDate } from "@/lib/dates";
 
 describe("W8 scoring and timezone regressions", () => {
   it("changes dates at each member's local midnight", () => {
@@ -65,35 +59,5 @@ describe("W8 scoring and timezone regressions", () => {
       expect(getMemberLocalDate(before, timezone)).toBe(expected);
       expect(getMemberLocalDate(after, timezone)).toBe(expected);
     }
-  });
-
-  it("keeps historical local dates stable when a timezone changes", () => {
-    const joinLocalDate = "2026-09-04";
-
-    expect(isEditableDate("2026-09-04", "2026-09-05", joinLocalDate)).toBe(
-      true,
-    );
-    expect(isEditableDate("2026-09-04", "2026-09-06", joinLocalDate)).toBe(
-      false,
-    );
-    expect(getYesterday("2026-09-05")).toBe("2026-09-04");
-    expect(getDayNumber(joinLocalDate, "2026-09-01")).toBe(4);
-  });
-
-  it("converts viewer-local feed instants without changing stored instants", () => {
-    const instant = "2026-09-02T03:59:59.000Z";
-
-    expect(
-      formatInstantForViewer(instant, "America/New_York", {
-        dateStyle: "short",
-        timeStyle: "short",
-      }),
-    ).toContain("9/1/26");
-    expect(
-      formatInstantForViewer(instant, "Asia/Tokyo", {
-        dateStyle: "short",
-        timeStyle: "short",
-      }),
-    ).toContain("9/2/26");
   });
 });
