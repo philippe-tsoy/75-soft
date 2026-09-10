@@ -13,15 +13,6 @@ interface GoalControlProps {
   titleAction?: ReactNode;
   /** Omitted for read-only cards; otherwise flips or acts on the checkmark. */
   onToggleDone?: () => void;
-  /**
-   * Overrides the default "locked once amount >= target" rule. The caller
-   * knows whether the goal reached its target through a reversible action
-   * (e.g. the checkmark's own fill) or an irreversible one (dragging the
-   * slider itself), which this component has no way to tell apart on its
-   * own. Omit to fall back to the amount-based rule (used by the diet
-   * card, which has no amount/target at all).
-   */
-  toggleLocked?: boolean;
   /** This card's own failed-mutation message, if any. */
   error?: string | null;
   sessionExpired?: boolean;
@@ -63,7 +54,6 @@ export function GoalControl({
   children,
   titleAction,
   onToggleDone,
-  toggleLocked,
   error,
   sessionExpired,
   onRetry,
@@ -77,15 +67,15 @@ export function GoalControl({
 
   /*
    * `met` is `amount >= target or markedDone`, so once the logged amount
-   * reaches the target the checkmark is already on. The caller can override
-   * this default lock (see `toggleLocked` doc) when it reached the target
-   * through a reversible action of its own.
+   * itself reaches the target, the checkmark just reflects that and can't
+   * be un-toggled — there's no "previous amount" to go back to. Below the
+   * target, markedDone is an independent, server-persisted flag the member
+   * can freely flip either way.
    */
-  const lockedByAmount =
+  const effectiveLocked =
     progress.amount !== undefined &&
     progress.target !== undefined &&
     progress.amount >= progress.target;
-  const effectiveLocked = toggleLocked ?? lockedByAmount;
   const toggleDisabled = pending || effectiveLocked || !onToggleDone;
 
   return (

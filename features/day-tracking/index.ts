@@ -23,9 +23,7 @@ export {
   amountDeltaTo,
   applyOptimisticAmount,
   applyOptimisticGoalDone,
-  resolveAmountFill,
   withGoalState,
-  type AmountFillResolution,
 } from "./optimistic";
 export {
   createDayTrackingReadService,

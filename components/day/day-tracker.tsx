@@ -29,7 +29,6 @@ import {
   amountDeltaTo,
   applyOptimisticAmount,
   applyOptimisticGoalDone,
-  resolveAmountFill,
   withGoalState,
 } from "@/features/day-tracking/optimistic";
 import { invalidateDayTracking } from "@/features/day-tracking/invalidation";
@@ -485,9 +484,6 @@ export function DayTracker({
   const [containersOpen, setContainersOpen] = useState(false);
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
-  const [preFillAmount, setPreFillAmount] = useState<Record<string, number>>(
-    {},
-  );
   const useSliders = amountInputMode === "slider";
 
   const dayCache = useRef<Record<string, DayRollupDTO>>({
@@ -800,7 +796,12 @@ export function DayTracker({
     }
   }
 
-  /** Simple independent flip, for a checkbox goal (no numeric target). */
+  /**
+   * Independent, server-persisted flip: `met` already folds this in as
+   * `amount >= target or markedDone`, so this works the same for a
+   * checkbox goal (no target at all) and a numeric one (an extra way to
+   * mark it done without needing the logged amount to reach the target).
+   */
   async function toggleGoalDone(goalId: string, retryOperationId?: string) {
     if (isPending(goalId)) {
       return;
@@ -863,65 +864,6 @@ export function DayTracker({
     }
 
     void addAmount(goalId, delta, unit);
-  }
-
-  /**
-   * The checkmark on a numeric goal is a fill/undo shortcut, not an
-   * independent flag: checking it fills the amount to the target, and
-   * checking it again restores whatever amount was logged right before
-   * that fill. Reaching the target by dragging the slider itself still
-   * locks the checkmark (see isAmountToggleLocked) since there is no
-   * "previous amount" to restore to.
-   */
-  function toggleAmountFill(goalId: string, unit: AmountUnit) {
-    if (isPending(goalId)) {
-      return;
-    }
-    if (!day.editable) {
-      return;
-    }
-
-    const progress = day.goals.find((goal) => goal.id === goalId);
-    if (!progress || progress.target === undefined) {
-      return;
-    }
-
-    const amount = progress.amount ?? 0;
-    const resolution = resolveAmountFill(
-      amount,
-      progress.target,
-      preFillAmount[goalId],
-    );
-
-    if (resolution.action === "locked") {
-      return;
-    }
-
-    setPreFillAmount((current) => {
-      const next = { ...current };
-      if (resolution.action === "fill") {
-        next[goalId] = amount;
-      } else {
-        delete next[goalId];
-      }
-      return next;
-    });
-    setAmountTo(goalId, resolution.nextValue, unit);
-  }
-
-  function isAmountToggleLocked(goalId: string): boolean {
-    const progress = day.goals.find((goal) => goal.id === goalId);
-    if (
-      !progress ||
-      progress.amount === undefined ||
-      progress.target === undefined
-    ) {
-      return false;
-    }
-
-    return (
-      progress.amount >= progress.target && preFillAmount[goalId] === undefined
-    );
   }
 
   const percentComplete =
@@ -1009,7 +951,7 @@ export function DayTracker({
               error={goalErrorState?.message}
               key={goal.id}
               onRetry={goalErrorState?.retry}
-              onToggleDone={() => toggleAmountFill(goal.id, unit)}
+              onToggleDone={() => void toggleGoalDone(goal.id)}
               pending={goalPending}
               progress={goal}
               sessionExpired={goalErrorState?.sessionExpired}
@@ -1027,7 +969,6 @@ export function DayTracker({
                   </Button>
                 ) : undefined
               }
-              toggleLocked={isAmountToggleLocked(goal.id)}
             >
               {useSliders ? (
                 <AmountSlider
