@@ -43,7 +43,6 @@ import type {
   DeletePostResult,
   FeedPage,
   FeedScoringAdapter,
-  OwnedGoal,
   ReactionResult,
 } from "./types";
 
@@ -128,33 +127,6 @@ async function getProfiles(
   }
 
   return new Map((data ?? []).map((profile) => [profile.id, profile]));
-}
-
-export async function listOwnedGoals(
-  client: FeedClient,
-  ownerId: string,
-): Promise<OwnedGoal[]> {
-  const { data, error } = await client
-    .from("goals")
-    .select("id, owner_id, name, target_value, unit, is_private, active")
-    .eq("owner_id", ownerId)
-    .eq("active", true)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    return [];
-  }
-
-  return ((data ?? []) as GoalRow[]).map((goal) => ({
-    id: goal.id,
-    name: goal.name,
-    targetValue: parseNumeric(goal.target_value),
-    unit: goal.unit,
-    isPrivate: goal.is_private,
-    active: goal.active,
-    templateId: null,
-    mode: goal.target_value === null ? "checkbox" : "numeric",
-  }));
 }
 
 function invalidGoal(message: string): never {

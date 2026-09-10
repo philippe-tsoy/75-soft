@@ -1,11 +1,10 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PostComposer } from "@/components/feed/post-composer";
-import { fetchGoals } from "@/components/goals";
 import { queryKeys } from "@/lib/query-keys";
 
 function PostIcon() {
@@ -30,19 +29,13 @@ function PostIcon() {
 export function TodayActions({
   localDate,
   userId,
-  allowYesterday,
 }: {
   localDate: string;
   userId: string;
-  allowYesterday: boolean;
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [composerOpen, setComposerOpen] = useState(false);
-  const goalsQuery = useQuery({
-    queryKey: queryKeys.goals("me"),
-    queryFn: fetchGoals,
-  });
 
   function handlePosted() {
     void queryClient.invalidateQueries({ queryKey: ["feed"] });
@@ -70,8 +63,6 @@ export function TodayActions({
       </button>
 
       <PostComposer
-        allowYesterday={allowYesterday}
-        goals={goalsQuery.data ?? []}
         onClose={() => setComposerOpen(false)}
         onPosted={handlePosted}
         open={composerOpen}

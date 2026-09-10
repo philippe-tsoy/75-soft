@@ -12,14 +12,12 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/feedback";
 import { Button } from "@/components/ui";
 import { DEFAULT_REACTION_PALETTE } from "@/lib/config/75-soft";
 import { queryKeys } from "@/lib/query-keys";
-import type { GoalDTO, PostDTO } from "@/lib/types";
+import type { PostDTO } from "@/lib/types";
 
 import { PostCard } from "./post-card";
 import { PostComposer } from "./post-composer";
 
 interface FeedScreenProps {
-  goals: GoalDTO[];
-  goalsUnavailable?: boolean;
   today: string;
   userId: string;
 }
@@ -69,12 +67,7 @@ async function fetchReactionPalette(): Promise<string[]> {
   return data?.emoji ?? [...DEFAULT_REACTION_PALETTE];
 }
 
-export function FeedScreen({
-  goals,
-  goalsUnavailable = false,
-  today,
-  userId,
-}: FeedScreenProps) {
+export function FeedScreen({ today, userId }: FeedScreenProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [composerOpen, setComposerOpen] = useState(false);
@@ -118,18 +111,6 @@ export function FeedScreen({
         </Button>
       </div>
 
-      {goalsUnavailable ? (
-        <div
-          className="border-border bg-surface-accent rounded-2xl border p-3 text-sm"
-          role="status"
-        >
-          <p className="font-semibold">Some post helpers are unavailable.</p>
-          <p className="text-muted mt-1">
-            You can still publish. Refresh later to attach goals to a post.
-          </p>
-        </div>
-      ) : null}
-
       {feedQuery.isPending ? <LoadingState label="Loading feed…" /> : null}
       {feedQuery.isError ? (
         <ErrorState
@@ -167,7 +148,6 @@ export function FeedScreen({
       ) : null}
 
       <PostComposer
-        goals={goals}
         onClose={() => setComposerOpen(false)}
         onPosted={invalidateFeed}
         open={composerOpen}

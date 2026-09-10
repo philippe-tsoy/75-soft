@@ -2,7 +2,6 @@ import type {
   AchievementDTO,
   CommentDTO,
   DayRollupDTO,
-  GoalDTO,
   PostDTO,
   ProfileDTO,
 } from "@/lib/types";
@@ -69,10 +68,6 @@ export interface DeletePostResult {
 export interface ReactionResult {
   postId: string;
   emoji: string;
-}
-
-export interface OwnedGoal extends GoalDTO {
-  mode: "checkbox" | "numeric";
 }
 
 export interface CommentResult {

@@ -1,30 +1,33 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { AchievementToast } from "@/components/achievements";
 import { Sheet } from "@/components/sheets/sheet";
-import { Button, Input, Label } from "@/components/ui";
+import { Button, Label } from "@/components/ui";
 import {
   MAX_NOTE_CHARACTERS,
   MAX_POST_PHOTO_BYTES,
   POST_PHOTO_MIME_TYPES,
 } from "@/lib/config/75-soft";
-import { getYesterday } from "@/lib/dates";
 import { queryKeys } from "@/lib/query-keys";
 import { validateImage } from "@/lib/storage";
-import type { AchievementDTO, DayRollupDTO, GoalDTO } from "@/lib/types";
+import type { AchievementDTO, DayRollupDTO } from "@/lib/types";
 
 interface PostComposerProps {
   open: boolean;
-  goals: GoalDTO[];
   userId: string;
   today: string;
-  allowYesterday?: boolean;
   onClose: () => void;
   onPosted: () => void;
+}
+
+interface PostGoalPayload {
+  goalId: string;
+  value?: number;
+  completed?: boolean;
 }
 
 interface PostMutationPayload {
@@ -65,22 +68,125 @@ async function fetchDay(localDate: string): Promise<DayRollupDTO> {
   return payload.data;
 }
 
+/** Every goal is already met once posting unlocks, so it attaches as-is. */
+function attachedGoalsFor(day: DayRollupDTO): PostGoalPayload[] {
+  return day.goals.map((goal) =>
+    goal.target === undefined
+      ? { goalId: goal.id, completed: true }
+      : { goalId: goal.id, value: goal.amount ?? goal.target },
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={28}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.8}
+      viewBox="0 0 24 24"
+      width={28}
+    >
+      <path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .89-.55l.42-.9A1 1 0 0 1 9.4 4h5.2a1 1 0 0 1 .9.55l.42.9a1 1 0 0 0 .88.55H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+function PhotoPicker({
+  photo,
+  error,
+  onChange,
+}: {
+  photo: File | null;
+  error: string | null;
+  onChange: (file: File | null) => void;
+}) {
+  const previewUrl = useMemo(
+    () => (photo ? URL.createObjectURL(photo) : null),
+    [photo],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="post-photo">Photo</Label>
+      <label
+        className="border-border bg-card hover:bg-surface-accent focus-within:ring-primary flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 text-center transition-colors focus-within:ring-2 focus-within:ring-offset-2"
+        htmlFor="post-photo"
+      >
+        {photo && previewUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- local object URL, not a remote/optimizable image */}
+            <img
+              alt=""
+              className="h-28 w-28 rounded-xl object-cover shadow-sm"
+              src={previewUrl}
+            />
+            <p className="max-w-full truncate text-sm font-medium">
+              {photo.name}
+            </p>
+            <p className="text-muted text-xs">
+              {(photo.size / 1_000_000).toFixed(2)} MB · Tap to change
+            </p>
+          </>
+        ) : (
+          <>
+            <span className="bg-surface-accent text-primary flex h-14 w-14 items-center justify-center rounded-full">
+              <CameraIcon />
+            </span>
+            <p className="text-sm font-semibold">Add a photo</p>
+            <p className="text-muted text-xs">
+              JPEG, PNG, or WebP up to {MAX_POST_PHOTO_BYTES / 1_000_000} MB
+            </p>
+          </>
+        )}
+        <input
+          accept={POST_PHOTO_MIME_TYPES.join(",")}
+          aria-required="true"
+          className="sr-only"
+          id="post-photo"
+          onChange={(event) => onChange(event.currentTarget.files?.[0] ?? null)}
+          required
+          type="file"
+        />
+      </label>
+      {photo ? (
+        <button
+          className="text-primary text-xs font-semibold"
+          onClick={() => onChange(null)}
+          type="button"
+        >
+          Remove photo
+        </button>
+      ) : null}
+      {error ? (
+        <p className="text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function PostComposer({
   open,
-  goals,
   userId,
   today,
-  allowYesterday = true,
   onClose,
   onPosted,
 }: PostComposerProps) {
   const router = useRouter();
-  const [localDate, setLocalDate] = useState<"today" | "yesterday">("today");
-  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
-  const [goalValues, setGoalValues] = useState<Record<string, string>>({});
-  const [goalCompleted, setGoalCompleted] = useState<Record<string, boolean>>(
-    {},
-  );
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -90,10 +196,9 @@ export function PostComposer({
   const [achievementToast, setAchievementToast] =
     useState<AchievementDTO | null>(null);
 
-  const resolvedDate = localDate === "today" ? today : getYesterday(today);
   const dayQuery = useQuery({
-    queryKey: queryKeys.day(userId, resolvedDate),
-    queryFn: () => fetchDay(resolvedDate),
+    queryKey: queryKeys.day(userId, today),
+    queryFn: () => fetchDay(today),
     enabled: open,
   });
   const day = dayQuery.data;
@@ -101,19 +206,7 @@ export function PostComposer({
     day && day.totalCount > 0 && day.metCount >= day.totalCount,
   );
 
-  const toggleGoal = (id: string) => {
-    setSelectedGoalIds((current) =>
-      current.includes(id)
-        ? current.filter((entry) => entry !== id)
-        : [...current, id],
-    );
-  };
-
   const resetDraft = () => {
-    setLocalDate("today");
-    setSelectedGoalIds([]);
-    setGoalValues({});
-    setGoalCompleted({});
     setNote("");
     setPhoto(null);
     setPhotoError(null);
@@ -139,15 +232,13 @@ export function PostComposer({
     setPhotoError(null);
   };
 
-  function goToTracker() {
-    onClose();
-    router.push(localDate === "today" ? "/today" : "/yesterday");
-  }
-
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
 
+    if (!day) {
+      return;
+    }
     if (!photo) {
       setError("A photo is required to post an update.");
       return;
@@ -157,30 +248,6 @@ export function PostComposer({
     }
 
     try {
-      const selectedGoals = selectedGoalIds.map((id) => {
-        const goal = goals.find((entry) => entry.id === id);
-        if (!goal) {
-          throw new Error("One selected goal is no longer available.");
-        }
-
-        if (goal.targetValue === null) {
-          return {
-            goalId: id,
-            completed: goalCompleted[id] ?? false,
-          };
-        }
-
-        const value = Number(goalValues[id]);
-        if (!Number.isFinite(value) || value <= 0) {
-          throw new Error(`${goal.name} needs a positive value.`);
-        }
-
-        return {
-          goalId: id,
-          value,
-        };
-      });
-
       let nextOperationId = operationId;
       if (!nextOperationId) {
         nextOperationId = createBrowserOperationId();
@@ -188,8 +255,8 @@ export function PostComposer({
       }
 
       const formData = new FormData();
-      formData.set("localDate", localDate);
-      formData.set("goals", JSON.stringify(selectedGoals));
+      formData.set("localDate", "today");
+      formData.set("goals", JSON.stringify(attachedGoalsFor(day)));
       formData.set("note", note);
       formData.set("clientOperationId", nextOperationId);
       formData.set("photo", photo);
@@ -239,24 +306,6 @@ export function PostComposer({
         title="Post update"
       >
         <div className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="post-local-date">Day</Label>
-            <select
-              className="border-border bg-card text-foreground focus-visible:ring-primary min-h-11 w-full rounded-xl border px-3 py-2 text-sm outline-none focus-visible:ring-2"
-              data-sheet-autofocus
-              id="post-local-date"
-              onChange={(event) =>
-                setLocalDate(event.target.value as "today" | "yesterday")
-              }
-              value={localDate}
-            >
-              <option value="today">Today</option>
-              <option disabled={!allowYesterday} value="yesterday">
-                {allowYesterday ? "Yesterday" : "Yesterday (not available yet)"}
-              </option>
-            </select>
-          </div>
-
           {dayQuery.isPending ? (
             <p className="text-muted text-sm">Loading your progress…</p>
           ) : null}
@@ -264,7 +313,7 @@ export function PostComposer({
           {dayQuery.isError ? (
             <div className="space-y-2">
               <p className="text-sm text-red-700" role="alert">
-                Could not load your progress for that day.
+                Could not load your progress for today.
               </p>
               <Button
                 onClick={() => void dayQuery.refetch()}
@@ -279,12 +328,12 @@ export function PostComposer({
           {day && !ready ? (
             <div className="border-border space-y-3 rounded-xl border border-dashed p-4">
               <p className="font-semibold">
-                Finish {localDate}&rsquo;s goals to post
+                Finish today&rsquo;s goals to post
               </p>
               <p className="text-muted text-sm">
                 {day.totalCount === 0
                   ? "You need at least one goal before you can post — add one on the tracker."
-                  : "A post shares that day's results with a photo, so every goal needs to be met first."}
+                  : "A post shares today's results with a photo, so every goal needs to be met first."}
               </p>
               {day.totalCount > 0 ? (
                 <ul className="space-y-1 text-sm">
@@ -295,9 +344,7 @@ export function PostComposer({
                     >
                       <span>{goal.name}</span>
                       <span
-                        className={
-                          goal.met ? "text-emerald-700" : "text-muted"
-                        }
+                        className={goal.met ? "text-emerald-700" : "text-muted"}
                       >
                         {goal.met ? "Met" : "Not yet"}
                       </span>
@@ -305,8 +352,14 @@ export function PostComposer({
                   ))}
                 </ul>
               ) : null}
-              <Button onClick={goToTracker} type="button">
-                Go finish {localDate}&rsquo;s goals
+              <Button
+                onClick={() => {
+                  onClose();
+                  router.push("/today");
+                }}
+                type="button"
+              >
+                Go finish today&rsquo;s goals
               </Button>
             </div>
           ) : null}
@@ -315,8 +368,7 @@ export function PostComposer({
             <form className="space-y-5" onSubmit={submit}>
               <fieldset className="border-border space-y-2 rounded-xl border p-3">
                 <legend className="text-foreground px-1 text-sm font-semibold">
-                  {localDate === "today" ? "Today" : "Yesterday"}&rsquo;s
-                  results
+                  Today&rsquo;s results
                 </legend>
                 <ul className="space-y-1 text-sm">
                   {day.goals.map((goal) => (
@@ -334,82 +386,10 @@ export function PostComposer({
                     </li>
                   ))}
                 </ul>
-              </fieldset>
-
-              {goals.length > 0 ? (
-                <fieldset className="space-y-3">
-                  <legend className="text-foreground text-sm font-semibold">
-                    Attach goals to this post
-                  </legend>
-                  <div className="space-y-2">
-                    {goals.map((goal) => {
-                      const selected = selectedGoalIds.includes(goal.id);
-                      return (
-                        <div
-                          className="border-border bg-card rounded-xl border p-3"
-                          key={goal.id}
-                        >
-                          <button
-                            aria-pressed={selected}
-                            className={`min-h-11 w-full rounded-lg px-3 text-left text-sm font-semibold ${
-                              selected
-                                ? "bg-surface-accent text-primary"
-                                : "hover:bg-surface-accent"
-                            }`}
-                            onClick={() => toggleGoal(goal.id)}
-                            type="button"
-                          >
-                            {selected ? "✓ " : ""}
-                            {goal.name}
-                          </button>
-                          {selected && goal.targetValue !== null ? (
-                            <div className="mt-3 flex items-center gap-2">
-                              <Label className="sr-only" htmlFor={`goal-${goal.id}`}>
-                                {goal.name} value
-                              </Label>
-                              <Input
-                                id={`goal-${goal.id}`}
-                                min="0"
-                                onChange={(event) =>
-                                  setGoalValues((current) => ({
-                                    ...current,
-                                    [goal.id]: event.target.value,
-                                  }))
-                                }
-                                step="any"
-                                type="number"
-                                value={goalValues[goal.id] ?? ""}
-                              />
-                              <span className="text-muted text-sm">
-                                {goal.unit}
-                              </span>
-                            </div>
-                          ) : selected ? (
-                            <label className="text-muted mt-2 flex min-h-11 items-center gap-2 text-sm">
-                              <input
-                                checked={goalCompleted[goal.id] ?? false}
-                                className="size-5"
-                                onChange={(event) =>
-                                  setGoalCompleted((current) => ({
-                                    ...current,
-                                    [goal.id]: event.target.checked,
-                                  }))
-                                }
-                                type="checkbox"
-                              />
-                              Completed
-                            </label>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              ) : (
-                <p className="text-muted text-sm">
-                  Your goals appear here once you add them on the tracker.
+                <p className="text-muted px-1 text-xs">
+                  Every goal above posts along with this update.
                 </p>
-              )}
+              </fieldset>
 
               <div className="space-y-2">
                 <Label htmlFor="post-note">Note (optional)</Label>
@@ -426,34 +406,11 @@ export function PostComposer({
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="post-photo">Photo</Label>
-                <input
-                  accept={POST_PHOTO_MIME_TYPES.join(",")}
-                  aria-required="true"
-                  className="border-border bg-card text-foreground min-h-11 w-full rounded-xl border p-2 text-sm"
-                  id="post-photo"
-                  onChange={(event) =>
-                    handlePhoto(event.currentTarget.files?.[0] ?? null)
-                  }
-                  required
-                  type="file"
-                />
-                {photo ? (
-                  <p className="text-muted text-xs">
-                    {photo.name} · {(photo.size / 1_000_000).toFixed(2)} MB
-                  </p>
-                ) : null}
-                <p className="text-muted text-xs">
-                  JPEG, PNG, or WebP up to {MAX_POST_PHOTO_BYTES / 1_000_000}{" "}
-                  MB.
-                </p>
-                {photoError ? (
-                  <p className="text-sm text-red-700" role="alert">
-                    {photoError}
-                  </p>
-                ) : null}
-              </div>
+              <PhotoPicker
+                error={photoError}
+                onChange={handlePhoto}
+                photo={photo}
+              />
 
               {error ? (
                 <p

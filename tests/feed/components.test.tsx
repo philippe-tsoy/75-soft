@@ -113,7 +113,6 @@ function renderComposer(
   return render(
     <QueryProvider>
       <PostComposer
-        goals={[]}
         onClose={vi.fn()}
         onPosted={vi.fn()}
         open
@@ -177,7 +176,9 @@ describe("W3 feed components", () => {
     expect(await screen.findByText(/today.s results/i)).toBeInTheDocument();
     expect(screen.getByText(/45 minutes/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/workout amount/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^workout$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^workout$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("requires a photo before it will submit, once ready", async () => {
@@ -185,7 +186,9 @@ describe("W3 feed components", () => {
     renderComposer();
     await screen.findByText(/today.s results/i);
 
-    fireEvent.submit(screen.getByRole("button", { name: /post update/i }).closest("form")!);
+    fireEvent.submit(
+      screen.getByRole("button", { name: /post update/i }).closest("form")!,
+    );
 
     expect(screen.getByRole("alert")).toHaveTextContent(/photo is required/i);
     expect(
@@ -195,31 +198,19 @@ describe("W3 feed components", () => {
     ).toBe(false);
   });
 
-  it("submits a post with an attached checkbox goal and a retry-stable operation id", async () => {
+  it("auto-attaches every one of today's met goals with a retry-stable operation id", async () => {
     const fetchMock = mockFetchForDay(completeDayPayload);
-    renderComposer({
-      goals: [
-        {
-          id: "00000000-0000-0000-0000-000000000010",
-          name: "Meditate",
-          targetValue: null,
-          unit: null,
-          isPrivate: false,
-          active: true,
-          templateId: null,
-        },
-      ],
-    });
+    renderComposer();
     await screen.findByText(/today.s results/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /meditate/i }));
-    fireEvent.click(screen.getByLabelText("Completed"));
     fireEvent.change(screen.getByLabelText("Photo"), {
       target: {
         files: [new File(["img"], "photo.png", { type: "image/png" })],
       },
     });
-    fireEvent.submit(screen.getByRole("button", { name: /post update/i }).closest("form")!);
+    fireEvent.submit(
+      screen.getByRole("button", { name: /post update/i }).closest("form")!,
+    );
 
     await waitFor(() =>
       expect(
@@ -235,7 +226,8 @@ describe("W3 feed components", () => {
     const operationId = body.get("clientOperationId");
     const goals = JSON.parse(String(body.get("goals"))) as Array<{
       goalId: string;
-      completed: boolean;
+      value?: number;
+      completed?: boolean;
     }>;
 
     expect(operationId).toMatch(
@@ -244,11 +236,10 @@ describe("W3 feed components", () => {
     expect(
       (init?.headers as Record<string, string>)["x-client-operation-id"],
     ).toBe(operationId);
+    expect(body.get("localDate")).toBe("today");
     expect(goals).toEqual([
-      {
-        goalId: "00000000-0000-0000-0000-000000000010",
-        completed: true,
-      },
+      { goalId: "00000000-0000-0000-0000-000000000030", value: 45 },
+      { goalId: "00000000-0000-0000-0000-000000000031", value: 2_000 },
     ]);
     expect(body.get("photo")).toBeInstanceOf(File);
   });

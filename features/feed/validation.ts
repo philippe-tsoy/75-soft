@@ -4,7 +4,7 @@ import {
   MAX_NOTE_CHARACTERS,
   POST_PHOTO_MIME_TYPES,
 } from "@/lib/config/75-soft";
-import { getYesterday, isEditableDate, isValidISODate } from "@/lib/dates";
+import { isScoredCalendarDate } from "@/lib/dates";
 import {
   CLIENT_OPERATION_ID_HEADER,
   requireClientOperationId,
@@ -171,30 +171,19 @@ export function resolvePostLocalDate(
   memberLocalDate: string,
   joinLocalDate: string,
 ): string {
-  const resolved =
-    assertion === "today"
-      ? memberLocalDate
-      : assertion === "yesterday"
-        ? getYesterday(memberLocalDate)
-        : assertion;
-
-  if (!isValidISODate(resolved)) {
-    throw new HttpError(400, "VALIDATION_ERROR", "Use a valid local date");
-  }
-
   if (
-    resolved < COHORT_START_DATE ||
-    !isEditableDate(resolved, memberLocalDate, joinLocalDate)
+    assertion !== "today" ||
+    !isScoredCalendarDate(memberLocalDate, joinLocalDate, COHORT_START_DATE)
   ) {
     throw new HttpError(
       422,
       "BUSINESS_RULE_VIOLATION",
-      "Posts can only be added for today or yesterday",
-      { localDate: resolved },
+      "Posts can only be added for today",
+      { localDate: memberLocalDate },
     );
   }
 
-  return isoDateSchema.parse(resolved);
+  return isoDateSchema.parse(memberLocalDate);
 }
 
 export function parseRequiredWholeAmount(

@@ -66,15 +66,18 @@ describe("W3 feed contracts", () => {
     expect(parsed.photo?.type).toBe("image/png");
   });
 
-  it("keeps the submitted date inside the member-local edit window", () => {
-    expect(resolvePostLocalDate("yesterday", "2026-09-02", "2026-09-01")).toBe(
-      "2026-09-01",
+  it("only accepts today, and only once the member has joined", () => {
+    expect(resolvePostLocalDate("today", "2026-09-02", "2026-09-01")).toBe(
+      "2026-09-02",
     );
     expect(() =>
-      resolvePostLocalDate("2026-09-01", "2026-09-03", "2026-09-01"),
+      resolvePostLocalDate("yesterday", "2026-09-02", "2026-09-01"),
     ).toThrow();
     expect(() =>
-      resolvePostLocalDate("2026-08-31", "2026-09-01", "2026-09-01"),
+      resolvePostLocalDate("2026-09-02", "2026-09-02", "2026-09-01"),
+    ).toThrow();
+    expect(() =>
+      resolvePostLocalDate("today", "2026-08-31", "2026-09-01"),
     ).toThrow();
   });
 

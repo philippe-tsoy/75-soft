@@ -39,7 +39,6 @@ export {
   getReactionPalette,
   getVisiblePost,
   listFeed,
-  listOwnedGoals,
   parseFeedRequest,
   removeReaction,
   setReaction,
@@ -51,7 +50,6 @@ export type {
   DeletePostResult,
   FeedCursor,
   FeedPage,
-  OwnedGoal,
   ReactionResult,
 } from "./types";
 export {
